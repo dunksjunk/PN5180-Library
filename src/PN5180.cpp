@@ -20,7 +20,7 @@
 
 #include <Arduino.h>
 #include "PN5180.h"
-#include "Debug.h"
+#include "PN5180Debug.h"
 
 // PN5180 1-Byte Direct Commands
 // see 11.4.3.3 Host Interface Command List

@@ -1,0 +1,112 @@
+# Changelog
+
+All notable changes to **PN5180 ESP32** are recorded here, newest first.
+Versions follow [Semantic Versioning](https://semver.org/): a major bump means
+breaking changes, a minor bump adds features, a patch bump fixes bugs.
+
+PN5180 ESP32 is a fork of [tueddy/PN5180-Library](https://github.com/tueddy/PN5180-Library),
+the very useful PN5180 library by Andreas Trappmann and Dirk Carstensen (tueddy) with
+contributions from many others. Versions 1.0 to 2.3.7 below are the upstream history,
+kept for reference. From 3.0.0 on, changes are made in this fork.
+
+**Version 3.0.0 – unreleased**
+
+Major rework of the fork. Behavior may change and there may be breaking changes;
+they are listed here as they land.
+
+- Forked from tueddy/PN5180-Library 2.3.7 and renamed to **PN5180 ESP32** (`PN5180-ESP32` on PlatformIO)
+- Optimizing for the general ESP32 platform first; other microcontrollers may be optimized later
+- Arduino 1.5 library layout: sources moved to `src/`, reference documents moved from `doc/` to `extras/`
+- Added a PlatformIO manifest (`library.json`)
+- Renamed the internal `Debug.h`/`Debug.cpp` to `PN5180Debug.h`/`PN5180Debug.cpp` so they can't clash with other libraries
+- `keywords.txt`: added the `PN5180ISO14443` class and the missing public methods, removed stale entries
+- Added GitHub Actions CI: arduino-lint plus compiling every example for Arduino Uno and ESP32
+- Moved release notes from `README.md` into this file
+- Documentation moved into `docs/`: installation, wiring, examples, a per-class API reference, debugging and troubleshooting. The README keeps the overview and quick start
+
+## Upstream history (tueddy/PN5180-Library)
+
+**Version 2.3.7 – 01.09.2025**
+- ISO14443: Explicitly allow unknown manufacturer ID 0xFF, thanks to tom!
+
+**Version 2.3.6 – 03.06.2025**
+- Allow changing the SPI frequency #16, thanks to @saidmoya12!
+
+**Version 2.3.5 – 15.05.2025**
+- Less blocking delays when using other tasks #15, thanks to @joe91!
+
+**Version 2.3.4 – 31.10.2024**
+- Better debug #13, thanks to @mjmeans!
+- Fix warning "will be initialized after [-Wreorder]"
+- Suppress [-Wunused-variable]
+
+**Version 2.3.3 – 27.10.2024**
+- Bugfix: start with default SPI
+
+**Version 2.3.2 – 27.10.2024**
+- Allow custom SPI pins #12, thanks to @mjmeans!
+- Create .gitattributes #10, thanks to @mjmeans
+- Replace errno, which is often a macro, thanks to @egnor
+
+**Version 2.3.1 – 01.10.2024**
+- Create a release with new version numbering
+
+**Version 2.3 – 29.05.2024**
+- cppcheck: make some params const
+- transceiveCommand: restore state of SS in case of an error
+
+**Version 2.2 – 13.01.2024**
+- Add MIFARE Classic authentication, thanks to @golyalpha!
+- Unify and simplify command creation
+- Smaller memory footprint when reading UID only (saves ~500 bytes)
+- Refactor SPI transaction into transceiveCommand()
+
+**Version 2.1 – 01.04.2023**
+- readMultipleBlock(), getInventoryMultiple() and getInventoryPoll() implemented, thanks to @laplacier!
+- Multiple ISO-15693 tags can be read at once, thanks to @laplacier!
+- Fixed some bugs and warnings with C++17
+
+**Version 2.0 – 17.10.2022**
+- Allow instantiation with a custom SPI class, thanks to @mwick83!
+
+**Version 1.9 – 05.10.2021**
+- Avoid endless loop in reset()
+
+**Version 1.8 – 05.04.2021**
+- Revert previous changes; SPI class was copied and caused problems
+- Speed up reading (shorter delays) in reset/transceive commands
+- Better initialization for ISO-14443 cards, see [AN12650](https://www.nxp.com.cn/docs/en/application-note/AN12650.pdf)
+
+**Version 1.7 – 27.03.2021**
+- Allow setup with another SPIClass than the default SPI, thanks to @tyllmoritz!
+
+**Version 1.6 – 31.01.2021**
+- Fix compiler warnings for PlatformIO
+- Add LPCD (low power card detection) example for ESP32 (with deep sleep to save battery power)
+
+**Version 1.5 – 07.12.2020**
+- ISO-14443 protocol, basic support for MIFARE cards
+- Low power card detection
+- Handle transceiveCommand timeout
+
+**Version 1.4 – 13.11.2019**
+- ICODE SLIX2 specific commands, see the [SL2S2602 datasheet](https://www.nxp.com/docs/en/data-sheet/SL2S2602.pdf)
+- Example usage, currently commented out
+
+**Version 1.3 – 21.05.2019**
+- Initialize reset pin with HIGH
+- Make readBuffer static
+- Typo fixes
+- Data type corrections for length parameters
+
+**Version 1.2 – 28.01.2019**
+- Clear option bit in PN5180ISO15693::readSingleBlock and ::writeSingleBlock
+
+**Version 1.1 – 26.10.2018**
+- Cleanup, bug fixing, refactoring
+- Automatic Arduino vs. ESP32 platform detection via compiler switches
+- Merged open pull requests
+- Documentation work
+
+**Version 1.0.x – 21.09.2018**
+- Initial versions

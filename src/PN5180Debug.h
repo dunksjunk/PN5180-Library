@@ -1,4 +1,4 @@
-// NAME: Debug.h
+// NAME: PN5180Debug.h
 //
 // DESC: Helper methods for debugging
 //
@@ -16,8 +16,8 @@
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 // Lesser General Public License for more details.
 //
-#ifndef DEBUG_H
-#define DEBUG_H
+#ifndef PN5180_DEBUG_H
+#define PN5180_DEBUG_H
 
 #ifdef DEBUG
 extern uint8_t _pn5180_debugIndent;
@@ -110,4 +110,4 @@ extern char * formatHex(const uint16_t val);
 extern char * formatHex(const uint32_t val);
 #endif
 
-#endif /* DEBUG_H */
+#endif /* PN5180_DEBUG_H */

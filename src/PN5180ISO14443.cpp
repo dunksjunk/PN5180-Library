@@ -20,8 +20,8 @@
 
 #include <Arduino.h>
 #include "PN5180ISO14443.h"
-#include <PN5180.h>
-#include "Debug.h"
+#include "PN5180.h"
+#include "PN5180Debug.h"
 
 PN5180ISO14443::PN5180ISO14443(uint8_t SSpin, uint8_t BUSYpin, uint8_t RSTpin, SPIClass& spi) 
               : PN5180(SSpin, BUSYpin, RSTpin, spi) {

@@ -1,0 +1,22 @@
+{
+  "name": "PN5180-ESP32",
+  "version": "3.0.0",
+  "description": "Driver for the NXP PN5180 NFC frontend: ISO 15693 (ICODE SLIX/SLIX2) and ISO 14443A (MIFARE, NTAG). Optimized for ESP32, also runs on AVR.",
+  "keywords": "nfc, rfid, pn5180, iso15693, iso14443, mifare, ntag, icode, lpcd",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dunksjunk/PN5180-Library.git"
+  },
+  "authors": [
+    { "name": "Rich Dunkel", "maintainer": true },
+    { "name": "Andreas Trappmann" },
+    { "name": "Dirk Carstensen" }
+  ],
+  "license": "LGPL-2.1-or-later",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "headers": ["PN5180.h", "PN5180ISO14443.h", "PN5180ISO15693.h"],
+  "export": {
+    "exclude": [".github", "extras", "docs"]
+  }
+}

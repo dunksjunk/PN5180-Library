@@ -1,112 +1,111 @@
-# PN5180-Library
+# PN5180 ESP32
 
-Arduino Uno / Arduino ESP-32 library for PN5180-NFC Module from NXP Semiconductors
+Arduino library for the **NXP PN5180** NFC frontend module, optimized for ESP32. It also builds on Arduino AVR boards (Uno, Nano, Mega); other microcontrollers may be optimized later.
 
-![PN5180-NFC module](./doc/PN5180-NFC.png)
-![PN5180 Schematics](./doc/FritzingLayout.jpg)
+This is a fork of [tueddy/PN5180-Library](https://github.com/tueddy/PN5180-Library), the very useful PN5180 library by Andreas Trappmann, Dirk Carstensen and contributors. Version 3.0.0 is a major rework and may change behavior or break existing code; see [CHANGELOG.md](CHANGELOG.md).
 
-Release Notes:
+## Features
 
-Version 2.3.7 - 01.09.2025
-	* ISO14443: Explicitly allow unknown manufacturer ID 0xFF, thanks to tom !
+- **ISO 15693** (NFC-V, e.g. NXP ICODE SLIX / SLIX2): inventory of one or many tags, block read/write, system info, SLIX2 privacy mode
+- **ISO 14443 Type A** (e.g. MIFARE Classic, MIFARE Ultralight, NTAG): card detection, 4- and 7-byte UIDs, MIFARE Classic authentication, block read/write
+- **Low Power Card Detection (LPCD)**, including waking an ESP32 from deep sleep
+- Low-level access to PN5180 registers, EEPROM and the RF field
+- Any `SPIClass`, custom SPI pins on ESP32, adjustable SPI clock
+- Every hardware wait is time-limited and yields (`delay(1)`), so other FreeRTOS tasks keep running
 
-Version 2.3.6 - 03.06.2025
-	*  Allow to change SPI frequency #16, thanks to @saidmoya12 !
-	
-Version 2.3.5 - 15.05.2025
+## Quick start
 
-	*  Less blocking delays when using other tasks #15, thanks to @joe91 !
+1. **Install** the library: in PlatformIO, add `https://github.com/dunksjunk/PN5180-Library.git` to `lib_deps`; for the Arduino IDE, see [Installation](docs/installation.md).
+2. **Wire** the module. On ESP32: SCK 18, MISO 19, MOSI 23, NSS 16, BUSY 5, RST 17, plus 3.3 V, 5 V and GND. On 5 V boards you need level shifters; see [Wiring](docs/wiring.md).
+3. **Run** one of the sketches below, or the [examples](docs/examples.md).
 
-Version 2.3.4 - 31.10.2024
+Read the UID of an ISO 14443 card (MIFARE, NTAG, …):
 
-	* Better debug #13, thanks to @mjmeans !
-	* Fix warning "will be initialized after [-Wreorder]"
-	* suppress [-Wunused-variable]
-	
-Version 2.3.3 - 27.10.2024
+```cpp
+#include <PN5180.h>
+#include <PN5180ISO14443.h>
 
-	* Bugfix start with default SPI
-	
-Version 2.3.2 - 27.10.2024
+#define PN5180_NSS  16
+#define PN5180_BUSY 5
+#define PN5180_RST  17
 
-	* Allow to use custom spi pins #12, thanks to @mjmeans !
-	* Create .gitattributes #10, thanks to @mjmeans 
-	* replace errno, which is often a macro, thanks to @egnor
+PN5180ISO14443 nfc(PN5180_NSS, PN5180_BUSY, PN5180_RST);
 
-Version 2.3.1 - 01.10.2024
+void setup() {
+  Serial.begin(115200);
+  nfc.begin();
+  nfc.reset();
+  nfc.setupRF();
+}
 
-	* create a release with new version numbering
+void loop() {
+  uint8_t uid[10];
+  int8_t uidLength = nfc.readCardSerial(uid);
+  if (uidLength > 0) {
+    Serial.print("UID:");
+    for (int i = 0; i < uidLength; i++) {
+      Serial.print(uid[i] < 0x10 ? " 0" : " ");
+      Serial.print(uid[i], HEX);
+    }
+    Serial.println();
+  }
+  delay(500);
+}
+```
 
-Version 2.3 - 29.05.2024
+Read the UID of an ISO 15693 tag (ICODE):
 
-	* cppcheck: make some params const
-	* transceiveCommand: restore state of SS in case of an error 
-	
-Version 2.2 - 13.01.2024
+```cpp
+#include <PN5180.h>
+#include <PN5180ISO15693.h>
 
-	* Add code to allow authentication with Mifare Classic cards, thanks to @golyalpha !
-	* Unify and simplify command creation
-	* Smaller memory footprint if reading UID only (save ~500 Bytes)
-	* Refactor SPI transaction into transceiveCommand()
+#define PN5180_NSS  16
+#define PN5180_BUSY 5
+#define PN5180_RST  17
 
-Version 2.1 - 01.04.2023
+PN5180ISO15693 nfc(PN5180_NSS, PN5180_BUSY, PN5180_RST);
 
-	* readMultipleBlock(), getInventoryMultiple() and getInventoryPoll() has been implemented, thanks to @laplacier !
-	* multiple ISO-15693 tags can be read at once, thanks to @laplacier ! 
-	* fixed some bugs and warnings with c++17
-	
-Version 2.0 - 17.10.2022
+void setup() {
+  Serial.begin(115200);
+  nfc.begin();
+  nfc.reset();
+  nfc.setupRF();
+}
 
-	* allow to instantiate with custom SPI class, thanks to  @mwick83!
-	
-Version 1.9 - 05.10.2021
+void loop() {
+  uint8_t uid[8];
+  ISO15693ErrorCode rc = nfc.getInventory(uid);
+  if (rc == ISO15693_EC_OK) {
+    Serial.print("UID:");
+    for (int i = 7; i >= 0; i--) {   // UID is stored LSB first
+      Serial.print(uid[i] < 0x10 ? " 0" : " ");
+      Serial.print(uid[i], HEX);
+    }
+    Serial.println();
+  } else {
+    Serial.println(nfc.strerror(rc));
+  }
+  delay(500);
+}
+```
 
-	* avoid endless loop in reset()
-	
-Version 1.8 - 05.04.2021
+Nothing happens? Check that the module answers by reading its product version. See [Debugging](docs/debugging.md#checking-the-module-responds) and [Troubleshooting](docs/troubleshooting.md).
 
-	* Revert previous changes, SPI class was copied and caused problems
-	* Speedup reading (shorter delays) in reset/transceive commands
-	* better initialization for ISO-14443 cards, see https://www.nxp.com.cn/docs/en/application-note/AN12650.pdf
-	
-Version 1.7 - 27.03.2021
+## Documentation
 
-	* allow to setup with other SPIClass than default SPI, thanks to @tyllmoritz !
-	
-Version 1.6 - 31.01.2021
+Full documentation is in [`docs/`](docs/README.md):
 
-	* fix compiler warnings for platform.io
-	* add LPCD (low power card detection) example for ESP-32 (with deep sleep tp save battery power)
+- [Installation](docs/installation.md) · [Wiring](docs/wiring.md) · [Examples](docs/examples.md)
+- [API reference](docs/api/README.md): [`PN5180`](docs/api/PN5180.md), [`PN5180ISO14443`](docs/api/PN5180ISO14443.md), [`PN5180ISO15693`](docs/api/PN5180ISO15693.md)
+- [Debugging](docs/debugging.md) · [Troubleshooting](docs/troubleshooting.md)
+- Datasheets in [`extras/`](extras)
 
-	Version 1.5 - 07.12.2020
+## License
 
-	* ISO-14443 protocol, basic support for Mifaire cards
-	* Low power card detection
-	* handle transceiveCommand timeout
+GNU Lesser General Public License v2.1 – see [LICENSE](LICENSE).
 
-Version 1.4 - 13.11.2019
+Copyright (c) 2018 Andreas Trappmann, (c) 2019 Dirk Carstensen, and contributors.
 
-	* ICODE SLIX2 specific commands, see https://www.nxp.com/docs/en/data-sheet/SL2S2602.pdf
-	* Example usage, currently outcommented
+## Changelog
 
-Version 1.3 - 21.05.2019
-
-	* Initialized Reset pin with HIGH
-	* Made readBuffer static
-	* Typo fixes
-	* Data type corrections for length parameters
-
-Version 1.2 - 28.01.2019
-
-	* Cleared Option bit in PN5180ISO15693::readSingleBlock and ::writeSingleBlock
-
-Version 1.1 - 26.10.2018
-
-	* Cleanup, bug fixing, refactoring
-	* Automatic check for Arduino vs. ESP-32 platform via compiler switches
-	* Added open pull requests
-	* Working on documentation
-
-Version 1.0.x - 21.09.2018
-
-	* Initial versions
+See [CHANGELOG.md](CHANGELOG.md).

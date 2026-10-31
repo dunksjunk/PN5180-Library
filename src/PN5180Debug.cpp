@@ -1,4 +1,4 @@
-// NAME: Debug.cpp
+// NAME: PN5180Debug.cpp
 //
 // DESC: Helper functions for debugging
 //
@@ -17,7 +17,7 @@
 // Lesser General Public License for more details.
 //
 #include <inttypes.h>
-#include "Debug.h"
+#include "PN5180Debug.h"
 
 uint8_t _pn5180_debugIndent;
 uint8_t _pn5180_debugIndentN;
