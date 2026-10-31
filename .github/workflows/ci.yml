@@ -16,12 +16,14 @@ jobs:
           compliance: specification
 
   compile:
+    name: compile (${{ matrix.board }})
     runs-on: ubuntu-24.04  # compile-sketches@v1 needs Python 3.12.4, not available on 26.04
     strategy:
       fail-fast: false
       matrix:
         include:
-          - fqbn: arduino:avr:uno
+          - board: uno
+            fqbn: arduino:avr:uno
             platforms: |
               - name: arduino:avr
             sketch-paths: |
@@ -31,7 +33,8 @@ jobs:
               - examples/PN5180-MultipleBlock
               - examples/PN5180-ISO14443
               - examples/PN5180-LowPowerCardDetection
-          - fqbn: esp32:esp32:esp32
+          - board: esp32
+            fqbn: esp32:esp32:esp32
             platforms: |
               - name: esp32:esp32
                 source-url: https://espressif.github.io/arduino-esp32/package_esp32_index.json
