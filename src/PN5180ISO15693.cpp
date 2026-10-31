@@ -136,13 +136,25 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
   PN5180DEBUG_PRINTF(F("mask=%d, maskLen=%d, cmdLen=%d"), p[0], maskLen, cmdLen);
   PN5180DEBUG_PRINTLN();
 #endif
+  // On any failure below, break out of the slot loop instead of returning, so the
+  // RF reset at the end still runs and restores TX_CONFIG (changed in step 11).
+  ISO15693ErrorCode rc = ISO15693_EC_OK;
   clearIRQStatus(0x000FFFFF);                                      // 3. Clear all IRQ_STATUS flags
-  sendData(inventory, cmdLen, 0);                                  // 4. 5. 6. Idle/StopCom Command, Transceive Command, Inventory command
-  
-  for(uint8_t slot=0; slot<16; slot++){                                // 7. Loop to check 16 time slots for data
+  if(!sendData(inventory, cmdLen, 0)){                             // 4. 5. 6. Idle/StopCom Command, Transceive Command, Inventory command
+    PN5180DEBUG(F("ERROR in sendData!"));
+    PN5180DEBUG_PRINTLN();
+    rc = ISO15693_EC_UNKNOWN_ERROR;
+  }
+
+  for(uint8_t slot=0; slot<16 && ISO15693_EC_OK == rc; slot++){       // 7. Loop to check 16 time slots for data
     uint32_t rxStatus;
     uint32_t irqStatus = getIRQStatus();
-    readRegister(RX_STATUS, &rxStatus);
+    if(!readRegister(RX_STATUS, &rxStatus)){
+      PN5180DEBUG(F("ERROR reading RX_STATUS!"));
+      PN5180DEBUG_PRINTLN();
+      rc = ISO15693_EC_UNKNOWN_ERROR;
+      break;
+    }
     PN5180DEBUG(F("slot="));
     PN5180DEBUG(formatHex(slot));
     PN5180DEBUG(F(": "));
@@ -186,8 +198,8 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
       if(0L == readBuffer){
         PN5180DEBUG(F("ERROR in readData!"));
         PN5180DEBUG_PRINTLN();
-		PN5180DEBUG_EXIT;
-        return ISO15693_EC_UNKNOWN_ERROR;
+        rc = ISO15693_EC_UNKNOWN_ERROR;
+        break;
       }
 #ifdef DEBUG
       PN5180DEBUG(F("readBuffer="));
@@ -214,15 +226,23 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
     }
     
     if(slot+1 < 16){ // If we have more cards to poll for...
-      writeRegisterWithAndMask(TX_CONFIG, 0xFFFFFB3F);             // 11. Next SEND_DATA will only include EOF
+      if(!writeRegisterWithAndMask(TX_CONFIG, 0xFFFFFB3F)){        // 11. Next SEND_DATA will only include EOF
+        rc = ISO15693_EC_UNKNOWN_ERROR;
+        break;
+      }
       clearIRQStatus(0x000FFFFF);                                  // 14. Clear all IRQ_STATUS flags
-      sendData(inventory, 0, 0);                                   // 12. 13. 15. Idle/StopCom Command, Transceive Command, Send EOF
+      if(!sendData(inventory, 0, 0)){                              // 12. 13. 15. Idle/StopCom Command, Transceive Command, Send EOF
+        rc = ISO15693_EC_UNKNOWN_ERROR;
+        break;
+      }
     }
   }
   setRF_off();                                                     // 16. Switch off RF field
-  setupRF();                                                       // 1. 2. Load ISO15693 config, RF on
+  if(!setupRF() && ISO15693_EC_OK == rc){                          // 1. 2. Load ISO15693 config (restores TX_CONFIG), RF on
+    rc = ISO15693_EC_UNKNOWN_ERROR;
+  }
   PN5180DEBUG_EXIT;
-  return ISO15693_EC_OK;
+  return rc;
 }
 
 /*
