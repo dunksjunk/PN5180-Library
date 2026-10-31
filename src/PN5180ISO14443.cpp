@@ -335,24 +335,25 @@ bool PN5180ISO14443::mifareBlockRead(uint8_t blockno, uint8_t *buffer) {
 uint8_t PN5180ISO14443::mifareBlockWrite16(uint8_t blockno, const uint8_t *buffer) {
 	uint8_t cmd[2];
 	// Clear RX CRC
-	writeRegisterWithAndMask(CRC_RX_CONFIG, 0xFFFFFFFE);
+	bool ok = writeRegisterWithAndMask(CRC_RX_CONFIG, 0xFFFFFFFE);
 
 	// Mifare write part 1
 	cmd[0] = 0xA0;
 	cmd[1] = blockno;
-	sendData(cmd, 2, 0x00);
-	readData(1, cmd);
+	ok = ok && sendData(cmd, 2, 0x00) && readData(1, cmd);
 
 	// Mifare write part 2
-	sendData(buffer,16, 0x00);
-	delay(10);
+	if (ok) {
+		ok = sendData(buffer,16, 0x00);
+		delay(10);
+	}
 
 	// Read ACK/NAK
-	readData(1, cmd);
+	if (ok) ok = readData(1, cmd);
 
-	//Enable RX CRC calculation
+	//Enable RX CRC calculation (always, so a failed write doesn't leave it off)
 	writeRegisterWithOrMask(CRC_RX_CONFIG, 0x1);
-	return cmd[0];
+	return ok ? cmd[0] : 0;  // 0 is never a valid ACK (0x0A)
 }
 
 bool PN5180ISO14443::mifareHalt() {

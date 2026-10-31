@@ -80,20 +80,30 @@ ISO15693ErrorCode PN5180ISO15693::getInventoryMultiple(uint8_t *uid, uint8_t max
   PN5180DEBUG_PRINTF("PN5180ISO15693::getInventoryMultiple(maxTags=%d, numCard=%d)", maxTags, *numCard);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint16_t collision[maxTags];
+  uint16_t collision[ISO15693_MAX_COLLISIONS];
   *numCard = 0;
   uint8_t numCol = 0;
-  inventoryPoll(uid, maxTags, numCard, &numCol, collision);
+  ISO15693ErrorCode rc = inventoryPoll(uid, maxTags, numCard, &numCol, collision);
+  if (ISO15693_EC_OK != rc) {
+    PN5180DEBUG_EXIT;
+    return rc;
+  }
   PN5180DEBUG_PRINTF("*** Number of collisions=%d", numCol);
   PN5180DEBUG_PRINTLN();
 
-  while(numCol){                                                 // 5+ Continue until no collisions detected
+  // Bound the number of rounds so tags that keep colliding can't hang the caller
+  uint8_t rounds = 0;
+  while(numCol && *numCard < maxTags && rounds++ < 4 * ISO15693_MAX_COLLISIONS){ // 5+ Continue until no collisions detected
 #ifdef DEBUG
     PN5180DEBUG(F("Polling with mask=0x"));
     PN5180DEBUG(formatHex(collision[0]));
     PN5180DEBUG_PRINTLN();
 #endif
-    inventoryPoll(uid, maxTags, numCard, &numCol, collision);
+    rc = inventoryPoll(uid, maxTags, numCard, &numCol, collision);
+    if (ISO15693_EC_OK != rc) {
+      PN5180DEBUG_EXIT;
+      return rc;
+    }
     numCol--;
     for(int i=0; i<numCol; i++){
       collision[i] = collision[i+1];
@@ -142,7 +152,11 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
     PN5180DEBUG(formatHex(rxStatus));
     PN5180DEBUG(F(": "));
     uint16_t len = (uint16_t)(rxStatus & 0x000001ff);
-    if((rxStatus >> 18) & 0x01 && *numCol < maxTags){              // 7+ Determine if a collision occurred
+    if(((rxStatus >> 18) & 0x01) && *numCol >= ISO15693_MAX_COLLISIONS){ // collision, but no room to follow it up
+      PN5180DEBUG(F("Collision ignored, collision list full."));
+      PN5180DEBUG_PRINTLN();
+    }
+    else if((rxStatus >> 18) & 0x01){                              // 7+ Determine if a collision occurred
       if(maskLen > 0) collision[*numCol] = collision[0] | (slot << (maskLen * 2));
       else collision[*numCol] = slot << (maskLen * 2); // Yes, store position of collision
       *numCol = *numCol + 1;
@@ -153,6 +167,14 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
     }
     else if(!(irqStatus & RX_IRQ_STAT) && !len){                   // 8. Check if a card has responded
       PN5180DEBUG(F("No card in this time slot."));
+      PN5180DEBUG_PRINTLN();
+    }
+    else if(*numCard >= maxTags){                                  // caller's uid buffer is full
+      PN5180DEBUG(F("Tag ignored, maxTags reached."));
+      PN5180DEBUG_PRINTLN();
+    }
+    else if(len < 10){                                             // flags + DSFID + 8-byte UID
+      PN5180DEBUG(F("Response too short for a UID."));
       PN5180DEBUG_PRINTLN();
     }
     else{
@@ -380,12 +402,18 @@ ISO15693ErrorCode PN5180ISO15693::writeSingleBlock(const uint8_t *uid, uint8_t b
  *    SOF, Flags, BlockData (len=blockSize * numBlock), CRC16, EOF
  */
 ISO15693ErrorCode PN5180ISO15693::readMultipleBlock(const uint8_t *uid, uint8_t blockNo, uint8_t numBlock, uint8_t *blockData, uint8_t blockSize) {
-  if(blockNo > numBlock-1){ // Attempted to start at a block greater than the num blocks on the VICC
-    PN5180DEBUG("Starting block exceeds length of data");
+  // The tag's block count isn't known here; the tag itself reports blocks it doesn't have.
+  // Only reject requests that can't be encoded or wouldn't fit the 508-byte read buffer.
+  if (numBlock == 0) {
+    PN5180DEBUG(F("readMultipleBlock: numBlock must be at least 1"));
     return ISO15693_EC_BLOCK_NOT_AVAILABLE;
   }
-  if( (blockNo + numBlock) > numBlock ){ // Will attempt to read a block greater than the num blocks on the VICC 
-    PN5180DEBUG("End of block exceeds length of data");
+  if ((uint16_t)blockNo + numBlock > 256) { // ISO15693 block numbers are 8 bit
+    PN5180DEBUG(F("readMultipleBlock: last block number exceeds 255"));
+    return ISO15693_EC_BLOCK_NOT_AVAILABLE;
+  }
+  if ((uint16_t)numBlock * blockSize + 1 > 508) { // response flags + block data
+    PN5180DEBUG(F("readMultipleBlock: response would exceed 508 bytes"));
     return ISO15693_EC_BLOCK_NOT_AVAILABLE;
   }
   

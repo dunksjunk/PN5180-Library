@@ -42,6 +42,8 @@ public:
   PN5180ISO15693(uint8_t SSpin, uint8_t BUSYpin, uint8_t RSTpin, SPIClass& spi=SPI);
   
 private:
+  // 16 time slots per inventory round; collisions beyond this are not followed up
+  enum { ISO15693_MAX_COLLISIONS = 16 };
   ISO15693ErrorCode issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr);
   ISO15693ErrorCode inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, uint8_t *numCol, uint16_t *collision);
 public:

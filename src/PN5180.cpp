@@ -145,7 +145,10 @@ bool PN5180::writeRegister(uint8_t reg, uint32_t value) {
    */
   uint8_t cmd[] = { PN5180_WRITE_REGISTER, reg, p[0], p[1], p[2], p[3] };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   PN5180DEBUG_EXIT;
   return true;
@@ -177,7 +180,10 @@ bool PN5180::writeRegisterWithOrMask(uint8_t reg, uint32_t mask) {
 
   uint8_t cmd[] = { PN5180_WRITE_REGISTER_OR_MASK, reg, p[0], p[1], p[2], p[3] };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   PN5180DEBUG_EXIT;
   return true;
@@ -209,7 +215,10 @@ bool PN5180::writeRegisterWithAndMask(uint8_t reg, uint32_t mask) {
 
   uint8_t cmd[] = { PN5180_WRITE_REGISTER_AND_MASK, reg, p[0], p[1], p[2], p[3] };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   PN5180DEBUG_EXIT;
   return true;
@@ -229,7 +238,10 @@ bool PN5180::readRegister(uint8_t reg, uint32_t *value) {
 
   uint8_t cmd[] = { PN5180_READ_REGISTER, reg };
 
-  transceiveCommand(cmd, sizeof(cmd), (uint8_t*)value, 4);
+  if (!transceiveCommand(cmd, sizeof(cmd), (uint8_t*)value, 4)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   PN5180DEBUG(F("Register value=0x"));
   PN5180DEBUG(formatHex(*value));
@@ -250,7 +262,10 @@ bool PN5180::writeEEprom(uint8_t addr, const uint8_t *buffer, uint8_t len) {
   cmd[0] = PN5180_WRITE_EEPROM;
   cmd[1] = addr;
   for (int i = 0; i < len; i++) cmd[2 + i] = buffer[i];
-  transceiveCommand(cmd, len + 2);
+  if (!transceiveCommand(cmd, len + 2)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
   PN5180DEBUG_EXIT;
   return true;
 }
@@ -284,7 +299,10 @@ bool PN5180::readEEprom(uint8_t addr, uint8_t *buffer, int len) {
 
   uint8_t cmd[] = { PN5180_READ_EEPROM, addr, uint8_t(len) };
 
-  transceiveCommand(cmd, sizeof(cmd), buffer, len);
+  if (!transceiveCommand(cmd, sizeof(cmd), buffer, len)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
 #ifdef DEBUG
   PN5180DEBUG(F("EEPROM values: "));
@@ -409,7 +427,10 @@ uint8_t * PN5180::readData(int len) {
     }
     readBuffer = readBufferDynamic508;
   }
-  transceiveCommand(cmd, sizeof(cmd), readBuffer, len);
+  if (!transceiveCommand(cmd, sizeof(cmd), readBuffer, len)) {
+    PN5180DEBUG_EXIT;
+    return 0L;
+  }
 
 #ifdef DEBUG
   PN5180DEBUG(F("Data read: "));
@@ -439,60 +460,52 @@ bool PN5180::readData(int len, uint8_t *buffer) {
   return ret;
 }
 
-/* prepare LPCD registers (Low Power Card Detection) */
+/* prepare LPCD registers (Low Power Card Detection)
+ * Writes the LPCD settings to EEPROM, but only the bytes that differ, so calling this
+ * on every boot or wake-up doesn't wear out the EEPROM.
+ * Returns false if any EEPROM read, write or verification fails.
+ */
 bool PN5180::prepareLPCD() {
-  //=======================================LPCD CONFIG================================================================================
-  PN5180DEBUG(F("----------------------------------"));
-  PN5180DEBUG(F("prepare LPCD..."));
+  PN5180DEBUG_PRINTLN(F("PN5180::prepareLPCD()"));
+  PN5180DEBUG_ENTER;
 
-  uint8_t data[255];
-  uint8_t response[256];
-    //1. Set Fieldon time                                           LPCD_FIELD_ON_TIME (0x36)
-  uint8_t fieldOn = 0xF0;//0x## -> ##(base 10) x 8μs + 62 μs
-  data[0] = fieldOn;
-  writeEEprom(0x36, data, 1);
-  readEEprom(0x36, response, 1);
-  fieldOn = response[0];
-  PN5180DEBUG("LPCD-fieldOn time: ");
-  PN5180DEBUG(formatHex(fieldOn));
+  static const uint8_t lpcdConfig[][2] = {
+    { LPCD_FIELD_ON_TIME,              0xF0 }, // RF on time = 62 us + 8 us * 0xF0
+    { LPCD_THRESHOLD,                  0x03 }, // very sensitive
+    { LPCD_REFVAL_GPO_CONTROL,         0x01 }, // 1 = self calibration (0 = auto calibration does not work)
+    { LPCD_GPO_TOGGLE_BEFORE_FIELD_ON, 0xF0 },
+    { LPCD_GPO_TOGGLE_AFTER_FIELD_ON,  0xF0 },
+  };
 
-    //2. Set threshold level                                         AGC_LPCD_THRESHOLD @ EEPROM 0x37
-  uint8_t threshold = 0x03;
-  data[0] = threshold;
-  writeEEprom(0x37, data, 1);
-  readEEprom(0x37, response, 1);
-  threshold = response[0];
-  PN5180DEBUG("LPCD-threshold: ");
-  PN5180DEBUG(formatHex(threshold));
+  bool written = false;
+  for (uint8_t i = 0; i < sizeof(lpcdConfig) / sizeof(lpcdConfig[0]); i++) {
+    const uint8_t addr = lpcdConfig[i][0];
+    const uint8_t value = lpcdConfig[i][1];
+    uint8_t current;
+    if (!readEEprom(addr, &current, 1)) {
+      PN5180DEBUG_PRINTLN(F("*** ERROR: prepareLPCD: EEPROM read failed"));
+      PN5180DEBUG_EXIT;
+      return false;
+    }
+    if (current == value) continue;
 
-  //3. Select LPCD mode                                               LPCD_REFVAL_GPO_CONTROL (0x38)
-  uint8_t lpcdMode = 0x01; // 1 = LPCD SELF CALIBRATION 
-                           // 0 = LPCD AUTO CALIBRATION (this mode does not work, should look more into it, no reason why it shouldn't work)
-  data[0] = lpcdMode;
-  writeEEprom(0x38, data, 1);
-  readEEprom(0x38, response, 1);
-  lpcdMode = response[0];
-  PN5180DEBUG("lpcdMode: ");
-  PN5180DEBUG(formatHex(lpcdMode));
-  
-  // LPCD_GPO_TOGGLE_BEFORE_FIELD_ON (0x39)
-  uint8_t beforeFieldOn = 0xF0; 
-  data[0] = beforeFieldOn;
-  writeEEprom(0x39, data, 1);
-  readEEprom(0x39, response, 1);
-  beforeFieldOn = response[0];
-  PN5180DEBUG("beforeFieldOn: ");
-  PN5180DEBUG(formatHex(beforeFieldOn));
-  
-  // LPCD_GPO_TOGGLE_AFTER_FIELD_ON (0x3A)
-  uint8_t afterFieldOn = 0xF0; 
-  data[0] = afterFieldOn;
-  writeEEprom(0x3A, data, 1);
-  readEEprom(0x3A, response, 1);
-  afterFieldOn = response[0];
-  PN5180DEBUG("afterFieldOn: ");
-  PN5180DEBUG(formatHex(afterFieldOn));
-  delay(100);
+    if (!writeEEprom(addr, &value, 1) || !readEEprom(addr, &current, 1) || current != value) {
+      PN5180DEBUG_PRINTLN(F("*** ERROR: prepareLPCD: EEPROM write failed"));
+      PN5180DEBUG_EXIT;
+      return false;
+    }
+    written = true;
+#ifdef DEBUG
+    PN5180DEBUG(F("LPCD EEPROM 0x"));
+    PN5180DEBUG(formatHex(addr));
+    PN5180DEBUG(F(" = 0x"));
+    PN5180DEBUG(formatHex(value));
+    PN5180DEBUG_PRINTLN();
+#endif
+  }
+
+  if (written) delay(100);
+  PN5180DEBUG_EXIT;
   return true;
 }
 
@@ -573,7 +586,10 @@ bool PN5180::loadRFConfig(uint8_t txConf, uint8_t rxConf) {
 
   uint8_t cmd[] = { PN5180_LOAD_RF_CONFIG, txConf, rxConf };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   PN5180DEBUG_EXIT;
   return true;
@@ -590,7 +606,10 @@ bool PN5180::setRF_on() {
 
   uint8_t cmd[] = { PN5180_RF_ON, 0x00 };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   unsigned long startedWaiting = millis();
   
@@ -623,7 +642,10 @@ bool PN5180::setRF_off() {
 
   uint8_t cmd[] { PN5180_RF_OFF, 0x00 };
 
-  transceiveCommand(cmd, sizeof(cmd));
+  if (!transceiveCommand(cmd, sizeof(cmd))) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   unsigned long startedWaiting = millis();
   PN5180DEBUG_PRINTLN(F("wait for RF field to shut down (max 500ms)"));
@@ -835,7 +857,7 @@ uint32_t PN5180::getIRQStatus() {
   PN5180DEBUG_ENTER;
 
   PN5180DEBUG_PRINTLN(F("Read IRQ-Status register..."));
-  uint32_t irqStatus;
+  uint32_t irqStatus = 0;  // on SPI failure report "no IRQ" rather than garbage
   readRegister(IRQ_STATUS, &irqStatus);
 
   PN5180DEBUG(F("IRQ-Status=0x"));
