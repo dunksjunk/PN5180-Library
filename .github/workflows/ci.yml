@@ -7,16 +7,16 @@ on:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # compile-sketches@v1 needs Python 3.12.4, not available on 26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: arduino/arduino-lint-action@v2
         with:
           library-manager: false
           compliance: specification
 
   compile:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # compile-sketches@v1 needs Python 3.12.4, not available on 26.04
     strategy:
       fail-fast: false
       matrix:
@@ -38,7 +38,7 @@ jobs:
             sketch-paths: |
               - examples
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: arduino/compile-sketches@v1
         with:
           fqbn: ${{ matrix.fqbn }}
