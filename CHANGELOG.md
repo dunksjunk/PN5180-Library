@@ -27,6 +27,8 @@ they are listed here as they land.
 - Fix: `readMultipleBlock()` rejected every start block except 0
 - Fix: `getInventoryMultiple()` could write past the caller's `uid` buffer when more than `maxTags` tags answered, could record a collided response as a UID, and used a variable-length array. It now stops at `maxTags`, bounds the number of anti-collision rounds, and returns the error if a poll fails
 - Fix: `mifareBlockWrite16()` ignored SPI failures. It now stops at the first failure, always re-enables RX CRC, and returns `0` on failure
+- Fix: the library did not compile on AVR (and other non-ESP32 boards) since 2.3.2, because `begin()` called the ESP32-only `SPI.begin(sck, miso, mosi, ss)`. Custom SPI pins are now ESP32-only and ignored elsewhere
+- Fix: the `PN5180-LPCD-ESP32-deep-sleep` example used an undefined `WAKEUP_PIN_MASK` and did not compile
 - Documentation moved into `docs/`: installation, wiring, examples, a per-class API reference, debugging and troubleshooting. The README keeps the overview and quick start
 
 ## Upstream history (tueddy/PN5180-Library)

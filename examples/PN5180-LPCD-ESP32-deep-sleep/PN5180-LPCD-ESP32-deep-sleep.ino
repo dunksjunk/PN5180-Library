@@ -140,7 +140,7 @@ void loop() {
       pinMode(LED_BUILTIN, INPUT);
       // configure wakeup pin for deep-sleep wake-up
       //esp_sleep_enable_ext0_wakeup(gpio_num_t(PN5180_IRQ), 1); //1 = High, 0 = Low
-      esp_sleep_enable_ext1_wakeup(WAKEUP_PIN_MASK, ESP_EXT1_WAKEUP_ANY_HIGH);
+      esp_sleep_enable_ext1_wakeup((1ULL << (PN5180_IRQ)), ESP_EXT1_WAKEUP_ANY_HIGH);
       // freeze pin states in deep sleep
       gpio_hold_en(gpio_num_t(PN5180_NSS)); // NSS
       gpio_hold_en(gpio_num_t(PN5180_RST)); // RST
