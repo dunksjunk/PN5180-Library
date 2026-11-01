@@ -44,7 +44,8 @@ public:
 private:
   // 16 time slots per inventory round; collisions beyond this are not followed up
   enum { ISO15693_MAX_COLLISIONS = 16 };
-  ISO15693ErrorCode issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr);
+  // resultLen (optional) receives the number of bytes the tag returned; check it before reading *resultPtr
+  ISO15693ErrorCode issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr, uint16_t *resultLen = 0);
   ISO15693ErrorCode inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, uint8_t *numCol, uint16_t *collision);
 public:
   ISO15693ErrorCode getInventory(uint8_t *uid);

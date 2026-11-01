@@ -45,9 +45,13 @@ ISO15693ErrorCode PN5180ISO15693::getInventory(uint8_t *uid) {
   }
   
   uint8_t *readBuffer;
-  ISO15693ErrorCode rc = issueISO15693Command(inventory, sizeof(inventory), &readBuffer);
+  uint16_t len;
+  ISO15693ErrorCode rc = issueISO15693Command(inventory, sizeof(inventory), &readBuffer, &len);
   if (ISO15693_EC_OK != rc) {
     return rc;
+  }
+  if (len < 10) { // flags + DSFID + 8-byte UID
+    return ISO15693_EC_UNKNOWN_ERROR;
   }
 
   PN5180DEBUG(F("Response flags: "));
@@ -292,9 +296,13 @@ ISO15693ErrorCode PN5180ISO15693::readSingleBlock(const uint8_t *uid, uint8_t bl
 #endif
 
   uint8_t *resultPtr;
-  ISO15693ErrorCode rc = issueISO15693Command(readSingleBlock, sizeof(readSingleBlock), &resultPtr);
+  uint16_t len;
+  ISO15693ErrorCode rc = issueISO15693Command(readSingleBlock, sizeof(readSingleBlock), &resultPtr, &len);
   if (ISO15693_EC_OK != rc) {
     return rc;
+  }
+  if (len < 1 + (uint16_t)blockSize) { // flags + block data
+    return ISO15693_EC_UNKNOWN_ERROR;
   }
 
   PN5180DEBUG("Value=");
@@ -459,8 +467,15 @@ ISO15693ErrorCode PN5180ISO15693::readMultipleBlock(const uint8_t *uid, uint8_t 
   }
 
   uint8_t *resultPtr;
-  ISO15693ErrorCode rc = issueISO15693Command(readMultipleCmd, sizeof(readMultipleCmd), &resultPtr);
+  uint16_t len;
+  ISO15693ErrorCode rc = issueISO15693Command(readMultipleCmd, sizeof(readMultipleCmd), &resultPtr, &len);
   if (ISO15693_EC_OK != rc) return rc;
+  // Some tags answer a range that runs past their last block with only the blocks they
+  // have and no error flag; don't hand back the rest of the read buffer as data.
+  if (len < 1 + (uint16_t)numBlock * blockSize) {
+    PN5180DEBUG_PRINTLN(F("readMultipleBlock: tag returned fewer blocks than requested"));
+    return ISO15693_EC_BLOCK_NOT_AVAILABLE;
+  }
 
   PN5180DEBUG("readMultipleBlock: Value=");
   for (int i=0; i<numBlock * blockSize; i++) {
@@ -548,9 +563,13 @@ ISO15693ErrorCode PN5180ISO15693::getSystemInfo(uint8_t *uid, uint8_t *blockSize
 #endif
 
   uint8_t *readBuffer;
-  ISO15693ErrorCode rc = issueISO15693Command(sysInfo, sizeof(sysInfo), &readBuffer);
+  uint16_t len;
+  ISO15693ErrorCode rc = issueISO15693Command(sysInfo, sizeof(sysInfo), &readBuffer, &len);
   if (ISO15693_EC_OK != rc) {
     return rc;
+  }
+  if (len < 10) { // flags + info flags + 8-byte UID
+    return ISO15693_EC_UNKNOWN_ERROR;
   }
 
   for (int i=0; i<8; i++) {
@@ -650,7 +669,11 @@ ISO15693ErrorCode PN5180ISO15693::getSystemInfo(uint8_t *uid, uint8_t *blockSize
 ISO15693ErrorCode PN5180ISO15693::getRandomNumber(uint8_t *randomData) {
   uint8_t getrandom[] = {0x02, 0xB2, 0x04};
   uint8_t *readBuffer;
-  ISO15693ErrorCode rc = issueISO15693Command(getrandom, sizeof(getrandom), &readBuffer);
+  uint16_t len;
+  ISO15693ErrorCode rc = issueISO15693Command(getrandom, sizeof(getrandom), &readBuffer, &len);
+  if (rc == ISO15693_EC_OK && len < 3) { // flags + 16-bit random number
+    rc = ISO15693_EC_UNKNOWN_ERROR;
+  }
   if (rc == ISO15693_EC_OK) {
     randomData[0] = readBuffer[1];
     randomData[1] = readBuffer[2];
@@ -773,14 +796,18 @@ ISO15693ErrorCode PN5180ISO15693::enablePrivacyMode(const uint8_t *password) {
  *   -1 = No card detected
  *   >0 = Error code
  */
-ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr) {
+ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr, uint16_t *resultLen) {
+  if (resultLen) *resultLen = 0;
 #ifdef DEBUG
   PN5180DEBUG(F("Issue Command 0x"));
   PN5180DEBUG(formatHex(cmd[1]));
   PN5180DEBUG("...\n");
 #endif
 
-  sendData(cmd, cmdLen);
+  if (!sendData(cmd, cmdLen)) {
+    PN5180DEBUG_PRINTLN(F("*** ERROR in sendData!"));
+    return ISO15693_EC_UNKNOWN_ERROR;
+  }
   delay(10);
 
   uint32_t irqR = getIRQStatus();
@@ -800,7 +827,10 @@ ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(const uint8_t *cmd, uint8
   }
   
   uint32_t rxStatus;
-  readRegister(RX_STATUS, &rxStatus);
+  if (!readRegister(RX_STATUS, &rxStatus)) {
+    PN5180DEBUG_PRINTLN(F("*** ERROR reading RX_STATUS!"));
+    return ISO15693_EC_UNKNOWN_ERROR;
+  }
   
   PN5180DEBUG(F("RX-Status="));
   PN5180DEBUG(formatHex(rxStatus));
@@ -833,8 +863,16 @@ ISO15693ErrorCode PN5180ISO15693::issueISO15693Command(const uint8_t *cmd, uint8
     return EC_NO_CARD;
   }
 
+  if (len < 1) { // not even the response flags byte
+    return ISO15693_EC_UNKNOWN_ERROR;
+  }
+  if (resultLen) *resultLen = len;
+
   uint8_t responseFlags = (*resultPtr)[0];
   if (responseFlags & (1<<0)) { // error flag
+    if (len < 2) {
+      return ISO15693_EC_UNKNOWN_ERROR;
+    }
     uint8_t errorCode = (*resultPtr)[1];
     
     PN5180DEBUG("ERROR code=");
