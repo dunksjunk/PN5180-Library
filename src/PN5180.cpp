@@ -602,10 +602,28 @@ bool PN5180::loadRFConfig(uint8_t txConf, uint8_t rxConf) {
  * RF_ON - 0x16
  * This command is used to switch on the internal RF field. If enabled the TX_RFON_IRQ is
  * set after the field is switched on.
+ * TX_RFON_IRQ only fires on an off->on transition, so if the field is already on we
+ * return right away instead of waiting for an IRQ that never comes.
  */
 bool PN5180::setRF_on() {
   PN5180DEBUG_PRINTLN(F("Set RF ON"));
   PN5180DEBUG_ENTER;
+
+  uint32_t rfStatus;
+  if (!readRegister(RF_STATUS, &rfStatus)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
+  if (rfStatus & RF_STATUS_TX_RF_STATUS) {
+    PN5180DEBUG_PRINTLN(F("RF field already on"));
+    PN5180DEBUG_EXIT;
+    return true;
+  }
+  // drop a stale flag so the wait below only sees this switch-on
+  if (!clearIRQStatus(TX_RFON_IRQ_STAT)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   uint8_t cmd[] = { PN5180_RF_ON, 0x00 };
 
@@ -638,10 +656,28 @@ bool PN5180::setRF_on() {
  * RF_OFF - 0x17
  * This command is used to switch off the internal RF field. If enabled, the TX_RFOFF_IRQ
  * is set after the field is switched off.
+ * TX_RFOFF_IRQ only fires on an on->off transition, so if the field is already off we
+ * return right away instead of waiting for an IRQ that never comes.
  */
 bool PN5180::setRF_off() {
   PN5180DEBUG_PRINTLN(F("Set RF OFF"));
   PN5180DEBUG_ENTER;
+
+  uint32_t rfStatus;
+  if (!readRegister(RF_STATUS, &rfStatus)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
+  if (0 == (rfStatus & RF_STATUS_TX_RF_STATUS)) {
+    PN5180DEBUG_PRINTLN(F("RF field already off"));
+    PN5180DEBUG_EXIT;
+    return true;
+  }
+  // drop a stale flag so the wait below only sees this switch-off
+  if (!clearIRQStatus(TX_RFOFF_IRQ_STAT)) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   uint8_t cmd[] { PN5180_RF_OFF, 0x00 };
 

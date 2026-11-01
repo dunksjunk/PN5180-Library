@@ -101,7 +101,11 @@ int8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 	}
 
 	// activate RF field
-	setRF_on();
+	if (!setRF_on()) {
+		PN5180DEBUG_PRINTLN(F("*** ERROR: Set RF ON failed!"));
+		PN5180DEBUG_EXIT;
+		return -1;
+	}
 	// wait RF-field to ramp-up
 	delay(10);
 	
