@@ -7,6 +7,7 @@ Start with the [Quick start](../README.md#quick-start) in the main README, then 
 - [Installation](installation.md): Arduino IDE, arduino-cli and PlatformIO
 - [Wiring](wiring.md): pinout, 3.3 V logic levels, default pins used by the examples
 - [Examples](examples.md): what each example sketch shows
+- [Tested hardware](tested-hardware.md): boards the library has been run on, and with what result
 
 ## Reference
 

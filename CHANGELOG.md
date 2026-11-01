@@ -22,6 +22,7 @@ they are listed here as they land.
 - `keywords.txt`: added the `PN5180ISO14443` class and the missing public methods, removed stale entries
 - Added GitHub Actions CI: arduino-lint plus compiling every example for Arduino Uno and ESP32
 - Moved release notes from `README.md` into this file
+- Added [`docs/tested-hardware.md`](docs/tested-hardware.md), a list of boards tested on real hardware
 - **Behavior change:** register, EEPROM, RF on/off and `loadRFConfig()` calls now return `false` when the SPI transaction times out (previously they always returned `true`). `readData(len)` returns `NULL` in that case, and `getIRQStatus()` returns `0` instead of an uninitialized value
 - **Behavior change:** `prepareLPCD()` only writes EEPROM bytes that differ from the wanted value and returns `false` on any EEPROM failure. Previously it rewrote all five bytes on every call (wearing the EEPROM when called on each deep-sleep wake-up) and always returned `true`
 - Fix: `readMultipleBlock()` rejected every start block except 0
