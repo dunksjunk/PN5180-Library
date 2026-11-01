@@ -256,20 +256,18 @@ void loop() {
     // try to read the UID for an ISO-14443 card
     uint8_t uid[10];
     nfc.setupRF();
-    if (nfc.isCardPresent()) {
-      uint8_t uidLength = nfc.readCardSerial(uid);
-      if (uidLength > 0) {
-        Serial.print(F("ISO14443 card found, UID="));
-        for (int i=0; i<uidLength; i++) {
-          Serial.print(uid[i] < 0x10 ? " 0" : " ");
-          Serial.print(uid[i], HEX);
-        }
-        Serial.println();
-        Serial.println(F("----------------------------------"));
-        delay(1000); 
-        return;
+    int8_t uidLength = nfc.readCardSerial(uid);
+    if (uidLength > 0) {
+      Serial.print(F("ISO14443 card found, UID="));
+      for (int i=0; i<uidLength; i++) {
+        Serial.print(uid[i] < 0x10 ? " 0" : " ");
+        Serial.print(uid[i], HEX);
       }
-    } 
+      Serial.println();
+      Serial.println(F("----------------------------------"));
+      delay(1000);
+      return;
+    }
     // check for ISO-15693 card
     nfc15693.reset();
     nfc15693.setupRF();

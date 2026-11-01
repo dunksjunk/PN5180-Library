@@ -168,20 +168,24 @@ void loop() {
   Serial.println(F("----------------------------------"));
   Serial.print(F("Loop #"));
   Serial.println(loopCnt++);
-  if (!nfc.isCardPresent()) {
-    Serial.print(F("no card found"));
+  uint8_t uid[10];
+  int8_t uidLength = nfc.readCardSerial(uid);  // > 0: UID length, -1: no card, 0/-2: error
+  if (uidLength == -1) {
+    Serial.println(F("no card found"));
+    delay(200);
     return;
   }
-  uint8_t uid[8];
-  if (!nfc.readCardSerial(uid)) {
+  if (uidLength <= 0) {
     Serial.print(F("Error in readCardSerial: "));
+    Serial.println(uidLength);
     errorFlag = true;
     return;
   }
   Serial.print(F("card serial successful, UID="));
-  for (int i=0; i<8; i++) {
-    Serial.print(uid[i], HEX); 
-    if (i < 2) Serial.print(":");
+  for (int i=0; i<uidLength; i++) {
+    if (i > 0) Serial.print(":");
+    if (uid[i] < 0x10) Serial.print("0");
+    Serial.print(uid[i], HEX);
   }
   Serial.println();
 
