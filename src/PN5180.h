@@ -70,16 +70,16 @@ enum PN5180TransceiveStat {
 };
 
 // PN5180 IRQ_STATUS
-#define RX_IRQ_STAT         	(1<<0)  // End of RF receiption IRQ
-#define TX_IRQ_STAT         	(1<<1)  // End of RF transmission IRQ
-#define IDLE_IRQ_STAT       	(1<<2)  // IDLE IRQ
-#define RFOFF_DET_IRQ_STAT  	(1<<6)  // RF Field OFF detection IRQ
-#define RFON_DET_IRQ_STAT   	(1<<7)  // RF Field ON detection IRQ
-#define TX_RFOFF_IRQ_STAT   	(1<<8)  // RF Field OFF in PCD IRQ
-#define TX_RFON_IRQ_STAT    	(1<<9)  // RF Field ON in PCD IRQ
-#define RX_SOF_DET_IRQ_STAT 	(1<<14) // RF SOF Detection IRQ
-#define GENERAL_ERROR_IRQ_STAT 	(1<<17) // General error IRQ
-#define LPCD_IRQ_STAT 			(1<<19) // LPCD Detection IRQ
+#define RX_IRQ_STAT         	(1UL<<0)  // End of RF receiption IRQ
+#define TX_IRQ_STAT         	(1UL<<1)  // End of RF transmission IRQ
+#define IDLE_IRQ_STAT       	(1UL<<2)  // IDLE IRQ
+#define RFOFF_DET_IRQ_STAT  	(1UL<<6)  // RF Field OFF detection IRQ
+#define RFON_DET_IRQ_STAT   	(1UL<<7)  // RF Field ON detection IRQ
+#define TX_RFOFF_IRQ_STAT   	(1UL<<8)  // RF Field OFF in PCD IRQ
+#define TX_RFON_IRQ_STAT    	(1UL<<9)  // RF Field ON in PCD IRQ
+#define RX_SOF_DET_IRQ_STAT 	(1UL<<14) // RF SOF Detection IRQ
+#define GENERAL_ERROR_IRQ_STAT 	(1UL<<17) // General error IRQ
+#define LPCD_IRQ_STAT 			(1UL<<19) // LPCD Detection IRQ
 
 #define MIFARE_CLASSIC_KEYA 0x60  // Mifare Classic key A
 #define MIFARE_CLASSIC_KEYB 0x61  // Mifare Classic key B
