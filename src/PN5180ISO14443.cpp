@@ -215,14 +215,13 @@ int8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 	};
 	// read 5 bytes sak, we will store at offset 2 for later usage
 	if (!readData(5, cmd+2)) {
-		Serial.println("Read 5 bytes failed!");
+		PN5180DEBUG_PRINTLN(F("*** ERROR: Read 5 bytes failed!"));
 		PN5180DEBUG_EXIT;
 		return -2;
 	}
-	// We do have a card now! enable CRC and send anticollision
-	// save the first 4 bytes of UID
-	for (int i = 0; i < 4; i++) buffer[i] = cmd[2 + i];
-	
+	// We do have a card now! enable CRC and send anticollision.
+	// buffer[0..1] keeps the ATQA; the UID is copied to buffer[3..] below.
+
 	//Enable RX CRC calculation
 	if (!writeRegisterWithOrMask(CRC_RX_CONFIG, 0x01)) {
 		PN5180DEBUG_EXIT;
@@ -238,9 +237,9 @@ int8_t PN5180ISO14443::activateTypeA(uint8_t *buffer, uint8_t kind) {
 	cmd[0] = 0x93;
 	cmd[1] = 0x70;
 	if (!sendData(cmd, 7, 0x00)) {
-		// no remaining bytes, we have a 4 byte UID
+		PN5180DEBUG_PRINTLN(F("*** ERROR: Send Select anti collision 1 failed!"));
 		PN5180DEBUG_EXIT;
-		return 4;
+		return -2;
 	}
 	//Read 1 byte SAK into buffer[2]
 	if (!readData(1, buffer+2)) {
