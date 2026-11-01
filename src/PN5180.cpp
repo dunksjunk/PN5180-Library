@@ -705,6 +705,15 @@ bool PN5180::setRF_off() {
   return true;
 }
 
+/*
+ * Public access to the host-interface command path, for PN5180 commands the library
+ * doesn't wrap. sendBuffer[0] is the command code. Pass recvBuffer = NULL / recvBufferLen = 0
+ * for commands without a response.
+ */
+bool PN5180::sendCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
+  return transceiveCommand(sendBuffer, sendBufferLen, recvBuffer, recvBufferLen);
+}
+
 //---------------------------------------------------------------------------------------------
 
 /*
