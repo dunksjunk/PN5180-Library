@@ -377,6 +377,16 @@ int8_t PN5180ISO14443::readCardSerial(uint8_t *buffer) {
     // Offset 2 is SAK.
     // UID 4 bytes : offset 3 to 6 is UID, offset 7 to 9 to Zero
     // UID 7 bytes : offset 3 to 9 is UID
+	// Reset the field first: a card that is still ACTIVE from a previous
+	// readCardSerial() ignores REQA (and drops to IDLE without answering), and a
+	// halted card only answers WUPA. Field off for >= 5.1 ms (ISO 14443-2) resets
+	// every card to IDLE; activateTypeA() switches the field back on.
+	if (!setRF_off()) {
+		PN5180DEBUG_EXIT;
+		return -1;
+	}
+	delay(10);
+
 	// try to activate Type A until response or timeout
     uint8_t response[10] = { 0 };
 	int8_t uidLength = activateTypeA(response, 0);
