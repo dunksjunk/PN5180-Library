@@ -24,7 +24,8 @@ uint8_t _pn5180_debugIndentN;
 bool _pn5180_debugNL = true;
 uint8_t _pn5180_debugSilent;
 
-#ifdef DEBUG
+// formatHex() is compiled unconditionally: DEBUG is switched on per .cpp file, and
+// this file never sees that define. Unused, the linker drops it (--gc-sections).
 
 static const char hexChar[] = "0123456789ABCDEF";
 static char hexBuffer[9];
@@ -53,5 +54,3 @@ char * formatHex(uint32_t val) {
   hexBuffer[8] = '\0';
   return hexBuffer;
 }
-
-#endif
