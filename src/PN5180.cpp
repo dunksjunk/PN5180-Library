@@ -518,9 +518,13 @@ bool PN5180::prepareLPCD() {
  */
 bool PN5180::switchToLPCD(uint16_t wakeupCounterInMs) {
   // clear all IRQ flags
-  clearIRQStatus(0xffffffff); 
+  if (!clearIRQStatus(0xffffffff)) {
+    return false;
+  }
   // enable only LPCD and general error IRQ
-  writeRegister(IRQ_ENABLE, LPCD_IRQ_STAT | GENERAL_ERROR_IRQ_STAT);  
+  if (!writeRegister(IRQ_ENABLE, LPCD_IRQ_STAT | GENERAL_ERROR_IRQ_STAT)) {
+    return false;
+  }
   // switch mode to LPCD 
   uint8_t cmd[] = { PN5180_SWITCH_MODE, 0x01, (uint8_t)(wakeupCounterInMs & 0xFF), (uint8_t)((wakeupCounterInMs >> 8U) & 0xFF) };
   return transceiveCommand(cmd, sizeof(cmd));

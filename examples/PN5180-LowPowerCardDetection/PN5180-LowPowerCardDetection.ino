@@ -182,54 +182,20 @@ void setup() {
   Serial.println(F("start LPCD..."));
 
 
-  uint8_t data[255];
-  uint8_t response[256];
-  // LPCD_FIELD_ON_TIME (0x36)
-  uint8_t fieldOn = 0xF0;
-  data[0] = fieldOn;
-  nfc.writeEEprom(0x36, data, 1);
-  nfc.readEEprom(0x36, response, 1);
-  fieldOn = response[0];
-  Serial.print("LPCD-fieldOn time: ");
-  Serial.println(fieldOn, HEX);
+  // Store the LPCD settings (field-on time, threshold, self-calibration, GPO control)
+  // in the PN5180 EEPROM. prepareLPCD() only writes bytes that differ, so calling it
+  // on every boot doesn't wear out the EEPROM.
+  if (nfc.prepareLPCD()) {
+    Serial.println(F("prepareLPCD success"));
+  } else {
+    Serial.println(F("prepareLPCD failed"));
+  }
+  uint8_t threshold;
+  if (nfc.readEEprom(LPCD_THRESHOLD, &threshold, 1)) {
+    Serial.print(F("LPCD-threshold: "));
+    Serial.println(threshold, HEX);
+  }
 
-  // LPCD_THRESHOLD (0x37)
-  uint8_t threshold = 0x04;
-  data[0] = threshold;
-  nfc.writeEEprom(0x37, data, 1);
-  nfc.readEEprom(0x37, response, 1);
-  threshold = response[0];
-  Serial.print("LPCD-threshold: ");
-  Serial.println(threshold, HEX);
-
-  // LPCD_REFVAL_GPO_CONTROL (0x38)
-  uint8_t lpcdMode = 0x01; // 1 = LPCD SELF CALIBRATION
-  data[0] = lpcdMode;
-  nfc.writeEEprom(0x38, data, 1);
-  nfc.readEEprom(0x38, response, 1);
-  lpcdMode = response[0];
-  Serial.print("lpcdMode: ");
-  Serial.println(lpcdMode, HEX);
-  
-  // LPCD_GPO_TOGGLE_BEFORE_FIELD_ON (0x39)
-  uint8_t beforeFieldOn = 0xF0; 
-  data[0] = beforeFieldOn;
-  nfc.writeEEprom(0x39, data, 1);
-  nfc.readEEprom(0x39, response, 1);
-  beforeFieldOn = response[0];
-  Serial.print("beforeFieldOn: ");
-  Serial.println(beforeFieldOn, HEX);
-  
-  // LPCD_GPO_TOGGLE_AFTER_FIELD_ON (0x3A)
-  uint8_t afterFieldOn = 0xF0; 
-  data[0] = afterFieldOn;
-  nfc.writeEEprom(0x3A, data, 1);
-  nfc.readEEprom(0x3A, response, 1);
-  afterFieldOn = response[0];
-  Serial.print("afterFieldOn: ");
-  Serial.println(afterFieldOn, HEX);
-  delay(100);
-      
   // turn on LPCD in self calibration mode
   if (nfc.switchToLPCD(sleepTimeMS)) {
     Serial.println("switchToLPCD success");
