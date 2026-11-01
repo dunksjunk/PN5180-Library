@@ -15,7 +15,7 @@ Status values:
 
 | Board | MCU / module | Flash / PSRAM | USB bridge | FQBN | Core | Library | Status |
 |---|---|---|---|---|---|---|---|
-| [ELEGOO ESP-32 Dev Board (ESP-WROOM-32)](#elegoo-esp-32-dev-board-esp-wroom-32) | ESP32-D0WD-V3 rev 3.1 / ESP-WROOM-32 | 4 MB / none | CP2102 | `esp32:esp32:esp32` | esp32 3.3.12 | 3.0.0-dev | Pending |
+| [ELEGOO ESP-32 Dev Board (ESP-WROOM-32)](#elegoo-esp-32-dev-board-esp-wroom-32) | ESP32-D0WD-V3 rev 3.1 / ESP-WROOM-32 | 4 MB / none | CP2102 | `esp32:esp32:esp32` | esp32 3.3.12 | 3.0.0-dev (5d45b0e) | Partial |
 
 ## Board details
 
@@ -28,10 +28,22 @@ Status values:
   otherwise Device Manager shows "Code 28" and no COM port is created.
   `arduino-cli board list` reports the board as "Unknown", so pass `--fqbn esp32:esp32:esp32`
   (Arduino IDE: "ESP32 Dev Module").
-- **PN5180 module:** not yet wired
-- **Wiring:** default ESP32 pins from [Wiring](wiring.md) (to be confirmed when the rig is built)
-- **Examples run:** none yet
-- **Tags tested:** none yet
+- **PN5180 module:** product version 4.0, firmware 4.0, EEPROM version 153.0
+- **Wiring:** default ESP32 pins from [Wiring](wiring.md) (SCK 18, MISO 19, MOSI 23, NSS 16, BUSY 5,
+  RST 17), powered from USB. IRQ not wired yet. Tag sits on a plastic spacer on the antenna.
+- **Examples run** (2026-11-01, library at 5d45b0e): `PN5180-ISO14443` and `PN5180-ReadUID` read the
+  NTAG215 UID on every loop, with free heap steady at 331 KB. ISO 15693, LPCD and the write paths are
+  not tested yet (no ISO 15693 tag, IRQ not wired, no writes done)
+- **Tags tested:** NTAG215 (ISO 14443A, 7-byte UID `04 BB 6A 04 CC 2A 81`, SAK 00, ATQA 00 44):
+  activation, UID, `mifareBlockRead()` of pages 0–134, GET_VERSION. Reads only; nothing written
+- **Bugs found and fixed on this rig:** see the 3.0.0 entries in [CHANGELOG](../CHANGELOG.md):
+  `setRF_on()`/`setRF_off()` 500 ms timeout when the field was already in that state (be2976d),
+  ATQA overwritten in `activateTypeA()` (50fd439), `readCardSerial()` alternating success/`-1` and
+  never finding a halted card (08e3f41), and the examples' handling of the `readCardSerial()` result (5d45b0e).
+  A `readCardSerial()` call with the card present went from about 630 ms to about 160 ms
+- **Open observation:** about 1 in 10 `mifareBlockRead()` calls failed with an RX data-integrity error
+  (`RX_STATUS` 0x003D0000) on this setup. This is probably RF margin through the spacer; the library
+  doesn't retry
 - **Notes:** board self-test without the PN5180 (2026-11-01) passed: flash, heap, timing, both
   cores, and pull-up/pull-down on GPIO 18, 19, 23, 16, 17. GPIO5 (default BUSY) reads high even
   with the internal pull-down, because the board has an external pull-up on this boot strapping pin.
