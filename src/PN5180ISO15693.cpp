@@ -194,7 +194,7 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
       PN5180DEBUG_PRINTF("slot=%d, irqStatus: %ld, RX_STATUS: %ld, Response length=%d", slot, irqStatus, rxStatus, len);
 #endif
       uint8_t *readBuffer;
-      readBuffer = readData(len+1);                                // 9. Read reception buffer
+      readBuffer = readData(len);                                // 9. Read reception buffer
       if(0L == readBuffer){
         PN5180DEBUG(F("ERROR in readData!"));
         PN5180DEBUG_PRINTLN();
@@ -203,7 +203,7 @@ ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, u
       }
 #ifdef DEBUG
       PN5180DEBUG(F("readBuffer="));
-      for(int i=0; i<len+1; i++){
+      for(int i=0; i<len; i++){
         PN5180DEBUG(formatHex(readBuffer[i]));
         if (i<len-2) PN5180DEBUG(" ");
       }
