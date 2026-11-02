@@ -207,7 +207,7 @@ void loop() {
   Serial.println();
 
   Serial.println(F("----------------------------------"));
-  uint8_t blockSize, numBlocks;
+  uint8_t blockSize = 0, numBlocks = 0;
   rc = nfc.getSystemInfo(uid, &blockSize, &numBlocks);
   if (ISO15693_EC_OK != rc) {
     Serial.print(F("Error in getSystemInfo: "));
@@ -252,7 +252,7 @@ void loop() {
 
 #ifdef WRITE_ENABLED
   Serial.println(F("----------------------------------"));
-  uint8_t *writeBuffer = malloc(blockSize);
+  uint8_t writeBuffer[blockSize];
   for (int i=0; i<blockSize; i++) {
     writeBuffer[i] = 0x80 + i;
   }
