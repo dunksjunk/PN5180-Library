@@ -79,170 +79,178 @@ ISO15693ErrorCode PN5180ISO15693::getInventory(uint8_t *uid) {
  * Request format: SOF, Req.Flags, Inventory, AFI (opt.), Mask len, Mask value, CRC16, EOF
  * Response format: SOF, Resp.Flags, DSFID, UID, CRC16, EOF
  *
+ * Anti-collision: each tag answers in the slot given by the 4 UID bits that follow the
+ * mask. Slots where several tags answered at once are pushed as a longer mask (the old
+ * mask plus that slot's nibble) and polled again, depth first, until no collided slots
+ * are left, maxTags UIDs are stored, or one of the ISO15693_MAX_* limits is reached.
  */
 ISO15693ErrorCode PN5180ISO15693::getInventoryMultiple(uint8_t *uid, uint8_t maxTags, uint8_t *numCard) {
-  PN5180DEBUG_PRINTF("PN5180ISO15693::getInventoryMultiple(maxTags=%d, numCard=%d)", maxTags, *numCard);
+  PN5180DEBUG_PRINTF("PN5180ISO15693::getInventoryMultiple(maxTags=%d)", maxTags);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint16_t collision[ISO15693_MAX_COLLISIONS];
   *numCard = 0;
-  uint8_t numCol = 0;
-  ISO15693ErrorCode rc = inventoryPoll(uid, maxTags, numCard, &numCol, collision);
-  if (ISO15693_EC_OK != rc) {
+  if (0 == maxTags) {
     PN5180DEBUG_EXIT;
-    return rc;
+    return ISO15693_EC_OK;
   }
-  PN5180DEBUG_PRINTF("*** Number of collisions=%d", numCol);
-  PN5180DEBUG_PRINTLN();
 
-  // Bound the number of rounds so tags that keep colliding can't hang the caller
-  uint8_t rounds = 0;
-  while(numCol && *numCard < maxTags && rounds++ < 4 * ISO15693_MAX_COLLISIONS){ // 5+ Continue until no collisions detected
-#ifdef DEBUG
-    PN5180DEBUG(F("Polling with mask=0x"));
-    PN5180DEBUG(formatHex(collision[0]));
-    PN5180DEBUG_PRINTLN();
-#endif
-    rc = inventoryPoll(uid, maxTags, numCard, &numCol, collision);
+  InventoryMask pending[ISO15693_MAX_COLLISIONS];
+  uint8_t numPending = 0;
+  InventoryMask mask = { 0, 0 };                                    // first round: no mask
+  for (uint8_t round = 1; ; round++) {
+    ISO15693ErrorCode rc = inventoryPoll(uid, maxTags, numCard, mask, pending, &numPending);
     if (ISO15693_EC_OK != rc) {
       PN5180DEBUG_EXIT;
       return rc;
     }
-    numCol--;
-    for(int i=0; i<numCol; i++){
-      collision[i] = collision[i+1];
-    }
+    PN5180DEBUG_PRINTF("*** round %d: %d UIDs, %d collided slots pending", round, *numCard, numPending);
+    PN5180DEBUG_PRINTLN();
+    if (0 == numPending || *numCard >= maxTags || round >= ISO15693_MAX_ROUNDS) break;
+    mask = pending[--numPending];
   }
   PN5180DEBUG_EXIT;
   return ISO15693_EC_OK;
 }
 
-ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, uint8_t *numCol, uint16_t *collision){
-  PN5180DEBUG_PRINTF("PN5180ISO15693::inventoryPoll(maxTags=%d, numCard=%d, numCol=%d)", maxTags, *numCard, *numCol);
+/*
+ * One 16-slot inventory round with the given mask. Found UIDs are appended to uid
+ * (duplicates skipped), collided slots are appended to pending as longer masks.
+ */
+ISO15693ErrorCode PN5180ISO15693::inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, InventoryMask mask,
+                                                InventoryMask *pending, uint8_t *numPending) {
+  PN5180DEBUG_PRINTF("PN5180ISO15693::inventoryPoll(mask=0x%lX, nibbles=%d, numCard=%d)",
+                     (unsigned long)mask.value, mask.nibbles, *numCard);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  
-  uint8_t maskLen = 0;
-  if(*numCol > 0){
-    uint32_t mask = collision[0];
-    do{
-      mask >>= 4L;
-      maskLen++;
-    }while(mask > 0);
-  } 
-  uint8_t *p = (uint8_t*)&(collision[0]);
-  //                      Flags,  CMD,
-  const uint8_t inventory[7] = { 0x06, 0x01, uint8_t(maskLen*4), p[0], p[1], p[2], p[3] };
-  //                         |\- inventory flag + high data rate
-  //                         \-- 16 slots: upto 16 cards, no AFI field present
-  uint8_t cmdLen = 3 + (maskLen/2) + (maskLen%2);
-#ifdef DEBUG
-  PN5180DEBUG_PRINTF(F("mask=%d, maskLen=%d, cmdLen=%d"), p[0], maskLen, cmdLen);
-  PN5180DEBUG_PRINTLN();
-#endif
+
+  // A tag starts its answer about 0.3 ms after the reader stops transmitting; a full
+  // inventory answer is done about 7 ms after the slot starts (measured incl. SPI). No SOF
+  // this long after the end of transmission means nobody answered in this slot. The
+  // window must start at TX_IRQ, not when sendData() returns: the request that opens
+  // slot 0 takes up to ~6 ms to transmit with a 4-byte mask.
+  const uint8_t slotSofTimeoutMs = 3;
+
+  //                     Flags, CMD,  mask length in bits
+  uint8_t inventory[7] = { 0x06, 0x01, uint8_t(mask.nibbles * 4) };
+  //                        |\- inventory flag + high data rate
+  //                        \-- 16 slots: upto 16 cards, no AFI field present
+  uint8_t maskBytes = (mask.nibbles + 1) / 2;                      // mask value, LSB first
+  for (uint8_t i = 0; i < maskBytes; i++) {
+    inventory[3 + i] = uint8_t(mask.value >> (8 * i));
+  }
+  uint8_t cmdLen = 3 + maskBytes;
+
   // On any failure below, break out of the slot loop instead of returning, so the
   // RF reset at the end still runs and restores TX_CONFIG (changed in step 11).
   ISO15693ErrorCode rc = ISO15693_EC_OK;
   clearIRQStatus(0x000FFFFF);                                      // 3. Clear all IRQ_STATUS flags
-  if(!sendData(inventory, cmdLen, 0)){                             // 4. 5. 6. Idle/StopCom Command, Transceive Command, Inventory command
-    PN5180DEBUG(F("ERROR in sendData!"));
-    PN5180DEBUG_PRINTLN();
+  if (!sendData(inventory, cmdLen, 0)) {                           // 4. 5. 6. Idle/StopCom Command, Transceive Command, Inventory command
+    PN5180DEBUG_PRINTLN(F("ERROR in sendData!"));
     rc = ISO15693_EC_UNKNOWN_ERROR;
   }
 
-  for(uint8_t slot=0; slot<16 && ISO15693_EC_OK == rc; slot++){       // 7. Loop to check 16 time slots for data
+  for (uint8_t slot = 0; slot < 16 && ISO15693_EC_OK == rc; slot++) { // 7. Loop to check 16 time slots for data
+    // Wait for this slot's answer to finish, or for the slot to turn out empty
+    uint32_t irqStatus;
+    unsigned long slotStart = millis();
+    unsigned long txDoneAt = slotStart;
+    for (;;) {
+      irqStatus = getIRQStatus();
+      if (irqStatus & (RX_IRQ_STAT | GENERAL_ERROR_IRQ_STAT)) break;
+      unsigned long now = millis();
+      if (!(irqStatus & TX_IRQ_STAT)) txDoneAt = now;              // still transmitting
+      else if (!(irqStatus & RX_SOF_DET_IRQ_STAT) && now - txDoneAt >= slotSofTimeoutMs) break;
+      if (now - slotStart > commandTimeout) break;
+      delay(1);
+    }
+
     uint32_t rxStatus;
-    uint32_t irqStatus = getIRQStatus();
-    if(!readRegister(RX_STATUS, &rxStatus)){
-      PN5180DEBUG(F("ERROR reading RX_STATUS!"));
-      PN5180DEBUG_PRINTLN();
+    if (!readRegister(RX_STATUS, &rxStatus)) {
+      PN5180DEBUG_PRINTLN(F("ERROR reading RX_STATUS!"));
       rc = ISO15693_EC_UNKNOWN_ERROR;
       break;
     }
+    uint16_t len = (uint16_t)(rxStatus & 0x000001ff);
+    bool answered = (irqStatus & (RX_IRQ_STAT | RX_SOF_DET_IRQ_STAT)) || len;
+    // bit 18 collision, 17 protocol error, 16 CRC/integrity error: two tags answering at
+    // once can show up as any of these. An answer that started but never finished, too.
+    bool garbled = (rxStatus & ((1UL << 18) | (1UL << 17) | (1UL << 16))) || !(irqStatus & RX_IRQ_STAT);
+#ifdef DEBUG
     PN5180DEBUG(F("slot="));
     PN5180DEBUG(formatHex(slot));
-    PN5180DEBUG(F(": "));
-    PN5180DEBUG(F("irqStatus="));
+    PN5180DEBUG(F(", irqStatus="));
     PN5180DEBUG(formatHex(irqStatus));
     PN5180DEBUG(F(", RX_STATUS="));
     PN5180DEBUG(formatHex(rxStatus));
     PN5180DEBUG(F(": "));
-    uint16_t len = (uint16_t)(rxStatus & 0x000001ff);
-    if(((rxStatus >> 18) & 0x01) && *numCol >= ISO15693_MAX_COLLISIONS){ // collision, but no room to follow it up
-      PN5180DEBUG(F("Collision ignored, collision list full."));
-      PN5180DEBUG_PRINTLN();
-    }
-    else if((rxStatus >> 18) & 0x01){                              // 7+ Determine if a collision occurred
-      if(maskLen > 0) collision[*numCol] = collision[0] | (slot << (maskLen * 2));
-      else collision[*numCol] = slot << (maskLen * 2); // Yes, store position of collision
-      *numCol = *numCol + 1;
-#ifdef DEBUG
-      PN5180DEBUG_PRINTF("Collision detected for UIDs matching %X starting at LSB", collision[*numCol-1]);
-      PN5180DEBUG_PRINTLN();
 #endif
+
+    if (!answered) {                                               // 8. Check if a card has responded
+      PN5180DEBUG_PRINTLN(F("No card in this time slot."));
     }
-    else if(!(irqStatus & RX_IRQ_STAT) && !len){                   // 8. Check if a card has responded
-      PN5180DEBUG(F("No card in this time slot."));
-      PN5180DEBUG_PRINTLN();
-    }
-    else if(*numCard >= maxTags){                                  // caller's uid buffer is full
-      PN5180DEBUG(F("Tag ignored, maxTags reached."));
-      PN5180DEBUG_PRINTLN();
-    }
-    else if(len < 10){                                             // flags + DSFID + 8-byte UID
-      PN5180DEBUG(F("Response too short for a UID."));
-      PN5180DEBUG_PRINTLN();
-    }
-    else{
+    else if (garbled) {                                            // 7+ collision: resolve with a longer mask
+      if (mask.nibbles >= ISO15693_MAX_MASK_NIBBLES) {
+        PN5180DEBUG_PRINTLN(F("Collision ignored, mask is already at its maximum length."));
+      }
+      else if (*numPending >= ISO15693_MAX_COLLISIONS) {
+        PN5180DEBUG_PRINTLN(F("Collision ignored, collision list full."));
+      }
+      else {
+        InventoryMask next;
+        next.value = mask.value | ((uint32_t)slot << (4 * mask.nibbles));
+        next.nibbles = mask.nibbles + 1;
+        pending[*numPending] = next;
+        *numPending = *numPending + 1;
 #ifdef DEBUG
-      PN5180DEBUG_PRINTF("slot=%d, irqStatus: %ld, RX_STATUS: %ld, Response length=%d", slot, irqStatus, rxStatus, len);
-#endif
-      uint8_t *readBuffer;
-      readBuffer = readData(len);                                // 9. Read reception buffer
-      if(0L == readBuffer){
-        PN5180DEBUG(F("ERROR in readData!"));
+        PN5180DEBUG_PRINTF("Collision, will poll UIDs ending in 0x%lX (%d nibbles)", (unsigned long)next.value, next.nibbles);
         PN5180DEBUG_PRINTLN();
+#endif
+      }
+    }
+    else if (len < 10) {                                           // flags + DSFID + 8-byte UID
+      PN5180DEBUG_PRINTLN(F("Response too short for a UID."));
+    }
+    else {
+      uint8_t *readBuffer = readData(len);                         // 9. Read reception buffer
+      if (0L == readBuffer) {
+        PN5180DEBUG_PRINTLN(F("ERROR in readData!"));
         rc = ISO15693_EC_UNKNOWN_ERROR;
         break;
       }
-#ifdef DEBUG
-      PN5180DEBUG(F("readBuffer="));
-      for(int i=0; i<len; i++){
-        PN5180DEBUG(formatHex(readBuffer[i]));
-        if (i<len-2) PN5180DEBUG(" ");
+      // A tag can be seen twice, e.g. when it misses an EOF and answers in a later slot
+      bool known = false;
+      for (uint8_t n = 0; n < *numCard && !known; n++) {
+        known = (0 == memcmp(uid + (uint16_t)n * 8, readBuffer + 2, 8));
       }
+      if (!known) {                                                // 10. Record all data to Inventory struct
+        memcpy(uid + (uint16_t)(*numCard) * 8, readBuffer + 2, 8);
+        *numCard = *numCard + 1;
+      }
+#ifdef DEBUG
+      PN5180DEBUG_PRINTF("Response flags: 0x%X, DSFID: 0x%X, %s, numCard=%d", readBuffer[0], readBuffer[1],
+                         known ? "already known" : "new", *numCard);
       PN5180DEBUG_PRINTLN();
 #endif
-
-      // Record raw UID data                                       // 10. Record all data to Inventory struct
-      for (int i=0; i<8; i++) {
-        uint8_t startAddr = (*numCard * 8) + i;
-        uid[startAddr] = readBuffer[2+i];
+      if (*numCard >= maxTags) {                                   // caller's uid buffer is full
+        PN5180DEBUG_PRINTLN(F("maxTags reached."));
+        break;
       }
-      *numCard = *numCard + 1;
-
-#ifdef DEBUG
-      PN5180DEBUG_PRINTF("getInventoryMultiple: Response flags: 0x%X, Data Storage Format ID: 0x%X", readBuffer[0], readBuffer[1]);
-      PN5180DEBUG_PRINTLN();
-      PN5180DEBUG_PRINTF("numCard=%d\n", *numCard);
-      PN5180DEBUG_PRINTLN();
-#endif
     }
-    
-    if(slot+1 < 16){ // If we have more cards to poll for...
-      if(!writeRegisterWithAndMask(TX_CONFIG, 0xFFFFFB3F)){        // 11. Next SEND_DATA will only include EOF
+
+    if (slot + 1 < 16) {                                           // If we have more cards to poll for...
+      if (!writeRegisterWithAndMask(TX_CONFIG, 0xFFFFFB3F)) {      // 11. Next SEND_DATA will only include EOF
         rc = ISO15693_EC_UNKNOWN_ERROR;
         break;
       }
       clearIRQStatus(0x000FFFFF);                                  // 14. Clear all IRQ_STATUS flags
-      if(!sendData(inventory, 0, 0)){                              // 12. 13. 15. Idle/StopCom Command, Transceive Command, Send EOF
+      if (!sendData(inventory, 0, 0)) {                            // 12. 13. 15. Idle/StopCom Command, Transceive Command, Send EOF
         rc = ISO15693_EC_UNKNOWN_ERROR;
         break;
       }
     }
   }
   setRF_off();                                                     // 16. Switch off RF field
-  if(!setupRF() && ISO15693_EC_OK == rc){                          // 1. 2. Load ISO15693 config (restores TX_CONFIG), RF on
+  if (!setupRF() && ISO15693_EC_OK == rc) {                        // 1. 2. Load ISO15693 config (restores TX_CONFIG), RF on
     rc = ISO15693_EC_UNKNOWN_ERROR;
   }
   PN5180DEBUG_EXIT;

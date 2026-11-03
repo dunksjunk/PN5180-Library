@@ -71,6 +71,17 @@ Status values:
     answered in the expected slot, and non-matching masks got no answer (3 runs). That test found and
     fixed a missed answer in slot 0 after a long masked request. Not tested yet: two tags answering in
     the same slot, more than 2 tags at once
+  - **Anti-collision with many tags** (2026-11-03, with the 2026-11-02 fix): about 20 NXP ICODE label tags
+    (`E0 04 01 08 66 …`, cut from a roll) in a loose pile, plus older cards. `getInventoryMultiple()`
+    returned up to 8 tags in one call, 21 distinct UIDs over 70 calls, no duplicates and no invalid UIDs.
+    Tags that answer in the same slot were returned together in one call many times (slot 12: `..33BC`,
+    `..213C`, `..0BDC`, `..47CC`; slot 3: `..D493` + `..E803`; slot 5: `..6A65` + `..E805`; slot 9:
+    `..C0E9` + `..57A9`), so collisions are resolved through masked rounds. A call took 340 ms with no collisions and up to about 1.4 s with
+    them (`maxTags` = 32). Not tested yet: tags whose UIDs share the last two nibbles, which needs a
+    second mask level. Tags on a roll, or stacked tightly, don't answer at all. Laid side by side, only
+    the tag over the antenna centre answers. In this pile the set of answering tags changed from second to
+    second, so addressed reads right after the inventory reached only 4 of 17 UIDs. Two tags
+    (`..D495`, `..C0EA`) answered `readSingleBlock(0)` with tag error `0x0F`; not investigated
   - **Antenna limits with full-size cards:** two ISO 15693 cards stacked flat on this module's antenna
     blocked each other completely (no answers at all). With card stock between them the top card was out
     of range; with one sheet of printer paper both read reliably. With three cards, or with one particular

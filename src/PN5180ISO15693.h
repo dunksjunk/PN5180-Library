@@ -42,11 +42,17 @@ public:
   PN5180ISO15693(uint8_t SSpin, uint8_t BUSYpin, uint8_t RSTpin, SPIClass& spi=SPI);
   
 private:
-  // 16 time slots per inventory round; collisions beyond this are not followed up
-  enum { ISO15693_MAX_COLLISIONS = 16 };
+  // Anti-collision limits for getInventoryMultiple():
+  // - up to ISO15693_MAX_COLLISIONS collided slots wait to be resolved at any time
+  // - masks hold up to ISO15693_MAX_MASK_NIBBLES nibbles (32 bits) of the UID
+  // - at most ISO15693_MAX_ROUNDS inventory rounds per call
+  enum { ISO15693_MAX_COLLISIONS = 16, ISO15693_MAX_MASK_NIBBLES = 8, ISO15693_MAX_ROUNDS = 64 };
+  // Inventory mask: the lowest `nibbles` nibbles of `value` must match the low bits of the UID
+  struct InventoryMask { uint32_t value; uint8_t nibbles; };
   // resultLen (optional) receives the number of bytes the tag returned; check it before reading *resultPtr
   ISO15693ErrorCode issueISO15693Command(const uint8_t *cmd, uint8_t cmdLen, uint8_t **resultPtr, uint16_t *resultLen = 0);
-  ISO15693ErrorCode inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, uint8_t *numCol, uint16_t *collision);
+  ISO15693ErrorCode inventoryPoll(uint8_t *uid, uint8_t maxTags, uint8_t *numCard, InventoryMask mask,
+                                  InventoryMask *pending, uint8_t *numPending);
 public:
   ISO15693ErrorCode getInventory(uint8_t *uid);
   ISO15693ErrorCode getInventoryMultiple(uint8_t *uid, uint8_t maxTags, uint8_t *numCard);
