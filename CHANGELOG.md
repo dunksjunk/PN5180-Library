@@ -40,6 +40,8 @@ they are listed here as they land.
 - `switchToLPCD()` now returns `false` if clearing the IRQ flags or enabling the LPCD IRQ fails (it used to ignore both and report only the mode switch)
 - Examples: `PN5180-LowPowerCardDetection` wrote the five LPCD EEPROM bytes on every boot (EEPROM wear) and used 511 bytes of stack for it, which is a lot on an Uno. It now calls `prepareLPCD()`. **Behavior change:** the example's LPCD threshold is now the library default `0x03` instead of `0x04`
 - Fix (examples): the optional `WRITE_ENABLED` branch in `PN5180-Library` and `PN5180-MultipleBlock` did not compile (`malloc` without a cast) and leaked its buffer on every loop. It now uses a stack buffer.
+- Fix: `mifareBlockWrite16()` returned whatever byte was in the receive buffer (typically `0xFF`) when the card didn't answer. It now waits for the answer and returns `0` if none came. It no longer sends the 16 data bytes after the card NAKs the block number. **Behavior change:** the ACK/NAK value is the 4-bit frame only (`0x0A` = ACK)
+- Fix: `mifareHalt()` always returned `true`; it now returns `false` if the HLTA command could not be sent
 - Fix: `sendData()` ignored failures while switching the PN5180 to Transceive, and `sendData()`/`writeEEprom()` copied the data into a variable-length array on the stack. The data now goes to the SPI bus directly. `sendData()` rejects a negative `len`
 - Fix: debug tracing of reads longer than 255 bytes looped forever (8-bit loop counter)
 - Fix: `mifareBlockWrite16()` ignored SPI failures. It now stops at the first failure, always re-enables RX CRC, and returns `0` on failure

@@ -56,12 +56,13 @@ uint16_t PN5180ISO14443::rxBytesReceived() {
 	PN5180DEBUG_PRINTLN(F("PN5180ISO14443::rxBytesReceived()"));	
 	PN5180DEBUG_ENTER;
 	
-	uint32_t rxStatus;
+	uint32_t rxStatus = 0;
 	uint16_t len = 0;
 
-	readRegister(RX_STATUS, &rxStatus);
-	// Lower 9 bits has length
-	len = (uint16_t)(rxStatus & 0x000001ff);
+	if (readRegister(RX_STATUS, &rxStatus)) {
+		// Lower 9 bits has length
+		len = (uint16_t)(rxStatus & 0x000001ff);
+	}
 
 	PN5180DEBUG_EXIT;
 	return len;
@@ -335,37 +336,46 @@ bool PN5180ISO14443::mifareBlockRead(uint8_t blockno, uint8_t *buffer) {
 }
 
 
+/*
+ * Wait up to timeoutMs for the card's answer to the last sendData() and read its first
+ * byte. RX_IRQ must have been cleared before that sendData(), so a byte count left over
+ * from an earlier reception isn't mistaken for the answer. Returns false if nothing
+ * arrived (no card, or the card stayed silent).
+ */
+bool PN5180ISO14443::readAckNak(uint8_t *ackNak, uint16_t timeoutMs) {
+	unsigned long started = millis();
+	while (!(getIRQStatus() & RX_IRQ_STAT)) {
+		if (millis() - started > timeoutMs) return false;
+		delay(1);
+	}
+	if (0 == rxBytesReceived() || !readData(1, ackNak)) return false;
+	*ackNak &= 0x0F;  // ACK/NAK is a 4-bit frame
+	return true;
+}
+
 uint8_t PN5180ISO14443::mifareBlockWrite16(uint8_t blockno, const uint8_t *buffer) {
-	uint8_t cmd[2];
-	// Clear RX CRC
+	uint8_t cmd[2] = { 0xA0, blockno };  // COMPATIBILITY_WRITE / MIFARE Classic WRITE
+	uint8_t ackNak = 0;
+	// Clear RX CRC: the ACK/NAK has none
 	bool ok = writeRegisterWithAndMask(CRC_RX_CONFIG, 0xFFFFFFFE);
 
-	// Mifare write part 1
-	cmd[0] = 0xA0;
-	cmd[1] = blockno;
-	ok = ok && sendData(cmd, 2, 0x00) && readData(1, cmd);
+	// Part 1: command + block number. Only send the data if the card ACKed it.
+	ok = ok && clearIRQStatus(RX_IRQ_STAT) && sendData(cmd, 2, 0x00) && readAckNak(&ackNak, 10);
 
-	// Mifare write part 2
-	if (ok) {
-		ok = sendData(buffer,16, 0x00);
-		delay(10);
+	// Part 2: the 16 data bytes, answered with ACK/NAK once the card has written them
+	if (ok && 0x0A == ackNak) {
+		ok = clearIRQStatus(RX_IRQ_STAT) && sendData(buffer, 16, 0x00) && readAckNak(&ackNak, 20);
 	}
-
-	// Read ACK/NAK
-	if (ok) ok = readData(1, cmd);
 
 	//Enable RX CRC calculation (always, so a failed write doesn't leave it off)
 	writeRegisterWithOrMask(CRC_RX_CONFIG, 0x1);
-	return ok ? cmd[0] : 0;  // 0 is never a valid ACK (0x0A)
+	return ok ? ackNak : 0;  // anything but 0x0A means the write did not happen
 }
 
 bool PN5180ISO14443::mifareHalt() {
-	uint8_t cmd[2];
-	//mifare Halt
-	cmd[0] = 0x50;
-	cmd[1] = 0x00;
-	sendData(cmd, 2, 0x00);	
-	return true;
+	//mifare Halt (HLTA). The card does not answer it.
+	uint8_t cmd[2] = { 0x50, 0x00 };
+	return sendData(cmd, 2, 0x00);
 }
 
 int8_t PN5180ISO14443::readCardSerial(uint8_t *buffer) {

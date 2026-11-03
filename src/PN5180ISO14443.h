@@ -30,6 +30,7 @@ public:
 private:
   uint16_t rxBytesReceived();
   uint32_t GetNumberOfBytesReceivedAndValidBits();
+  bool readAckNak(uint8_t *ackNak, uint16_t timeoutMs);
 public:
   // Mifare TypeA
   int8_t activateTypeA(uint8_t *buffer, uint8_t kind);
