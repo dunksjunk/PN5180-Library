@@ -146,7 +146,7 @@ public:
   /* cmd 0x17 */
   bool setRF_off();
 
-  bool sendCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen);
+  bool sendCommand(const uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen);
 
   /*
    * Helper functions
@@ -164,10 +164,11 @@ public:
    * Private methods, called within an SPI transaction
    */
 private:
-  bool transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer = 0, size_t recvBufferLen = 0);
+  // Neither sendBuffer nor payload is modified.
+  bool transceiveCommand(const uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer = 0, size_t recvBufferLen = 0);
   // Same, for a command made of a short header plus a caller's payload: both go out in one
-  // SPI frame without copying the payload (which is not modified).
-  bool transceiveCommand(uint8_t *header, size_t headerLen, const uint8_t *payload, size_t payloadLen,
+  // SPI frame without copying the payload.
+  bool transceiveCommand(const uint8_t *header, size_t headerLen, const uint8_t *payload, size_t payloadLen,
                          uint8_t *recvBuffer, size_t recvBufferLen);
 
 };

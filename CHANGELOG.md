@@ -46,6 +46,7 @@ they are listed here as they land.
 - Fix: `sendData()` ignored failures while switching the PN5180 to Transceive, and `sendData()`/`writeEEprom()` copied the data into a variable-length array on the stack. The data now goes to the SPI bus directly. `sendData()` rejects a negative `len`
 - Fix: debug tracing of reads longer than 255 bytes looped forever (8-bit loop counter)
 - Fix: sign-compare warning in `PN5180ISO15693.cpp`
+- Fix: `sendCommand()` overwrote the caller's `sendBuffer` with the bytes the PN5180 clocked back (in-place SPI transfer). Commands are now sent byte by byte and the buffer is left unchanged; `sendCommand()` takes a `const uint8_t *`
 - Fix: `mifareBlockWrite16()` ignored SPI failures. It now stops at the first failure, always re-enables RX CRC, and returns `0` on failure
 - Fix: the library did not compile on AVR (and other non-ESP32 boards) since 2.3.2, because `begin()` called the ESP32-only `SPI.begin(sck, miso, mosi, ss)`. Custom SPI pins are now ESP32-only and ignored elsewhere
 - Fix: the `PN5180-LPCD-ESP32-deep-sleep` example used an undefined `WAKEUP_PIN_MASK` and did not compile

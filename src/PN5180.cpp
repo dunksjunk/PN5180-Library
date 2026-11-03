@@ -709,9 +709,9 @@ bool PN5180::setRF_off() {
 /*
  * Public access to the host-interface command path, for PN5180 commands the library
  * doesn't wrap. sendBuffer[0] is the command code. Pass recvBuffer = NULL / recvBufferLen = 0
- * for commands without a response.
+ * for commands without a response. sendBuffer is not modified.
  */
-bool PN5180::sendCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
+bool PN5180::sendCommand(const uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
   return transceiveCommand(sendBuffer, sendBufferLen, recvBuffer, recvBufferLen);
 }
 
@@ -753,11 +753,11 @@ status register contain information on the exception.
  * 5. Wait until BUSY is low
  * If there is a parameter error, the IRQ is set to ACTIVE and a GENERAL_ERROR_IRQ is set.
  */
-bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
+bool PN5180::transceiveCommand(const uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
   return transceiveCommand(sendBuffer, sendBufferLen, 0, 0, recvBuffer, recvBufferLen);
 }
 
-bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, const uint8_t *payload, size_t payloadLen,
+bool PN5180::transceiveCommand(const uint8_t *sendBuffer, size_t sendBufferLen, const uint8_t *payload, size_t payloadLen,
                                uint8_t *recvBuffer, size_t recvBufferLen) {
   PN5180DEBUG_PRINTF(F("PN5180::transceiveCommand(*sendBuffer, sendBufferLen=%d, payloadLen=%d, *recvBuffer, recvBufferLen=%d)"),
                      sendBufferLen, payloadLen, recvBufferLen);
@@ -788,8 +788,12 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, const 
   // 1.
   digitalWrite(PN5180_NSS, LOW); delay(1);
   // 2.
-  PN5180_SPI.transfer((uint8_t*)sendBuffer, sendBufferLen);  // in place: overwrites sendBuffer
-  for (size_t i = 0; i < payloadLen; i++) {                  // byte-wise, so payload stays unmodified
+  // Byte-wise: the buffer variant of SPI.transfer() works in place and would overwrite
+  // the caller's command bytes with what the PN5180 clocks back.
+  for (size_t i = 0; i < sendBufferLen; i++) {
+    PN5180_SPI.transfer(sendBuffer[i]);
+  }
+  for (size_t i = 0; i < payloadLen; i++) {
     PN5180_SPI.transfer(payload[i]);
   }
   // 3.
