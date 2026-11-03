@@ -83,7 +83,7 @@ void PN5180::begin(int8_t sck, int8_t miso, int8_t mosi, int8_t ss) {
   digitalWrite(PN5180_RST, HIGH); // no reset
 
 #if defined(ARDUINO_ARCH_ESP32)
-  if ((PN5180_SCK > 0) && (PN5180_MISO > 0) && (PN5180_MOSI > 0)) {
+  if ((PN5180_SCK >= 0) && (PN5180_MISO >= 0) && (PN5180_MOSI >= 0)) {  // -1 = not given; GPIO 0 is valid
     // start SPI with custom pins (only ESP32's SPIClass::begin() takes pins)
     PN5180_SPI.begin(PN5180_SCK, PN5180_MISO, PN5180_MOSI, PN5180_NSS);
     PN5180DEBUG(F("Custom SPI pinout: "));
