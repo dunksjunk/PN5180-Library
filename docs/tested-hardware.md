@@ -81,7 +81,9 @@ Status values:
     second mask level. Tags on a roll, or stacked tightly, don't answer at all. Laid side by side, only
     the tag over the antenna centre answers. In this pile the set of answering tags changed from second to
     second, so addressed reads right after the inventory reached only 4 of 17 UIDs. Two tags
-    (`..D495`, `..C0EA`) answered `readSingleBlock(0)` with tag error `0x0F`; not investigated
+    (`..D495`, `..C0EA`) answered `readSingleBlock(0)` with tag error `0x0F` in the pile. Alone on the reader, `..C0EA`
+    then read cleanly (10/10 inventories, 3/3 block reads), so the error is most likely a tag at the edge
+    of the field, not a library problem
   - **Antenna limits with full-size cards:** two ISO 15693 cards stacked flat on this module's antenna
     blocked each other completely (no answers at all). With card stock between them the top card was out
     of range; with one sheet of printer paper both read reliably. With three cards, or with one particular
