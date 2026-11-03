@@ -288,7 +288,7 @@ ISO15693ErrorCode PN5180ISO15693::readSingleBlock(const uint8_t *uid, uint8_t bl
 
 #ifdef DEBUG
   PN5180DEBUG_PRINTF("Read Single Block #%d, size=%d:", blockNo, blockSize);
-  for (int i=0; i<sizeof(readSingleBlock); i++) {
+  for (size_t i=0; i<sizeof(readSingleBlock); i++) {
     PN5180DEBUG(" ");
     PN5180DEBUG(formatHex(readSingleBlock[i]));
   }
@@ -461,7 +461,7 @@ ISO15693ErrorCode PN5180ISO15693::readMultipleBlock(const uint8_t *uid, uint8_t 
   PN5180DEBUG(", blockSize=");
   PN5180DEBUG(blockSize);
   PN5180DEBUG(", Cmd: ");
-  for (int i=0; i<sizeof(readMultipleCmd); i++) {
+  for (size_t i=0; i<sizeof(readMultipleCmd); i++) {
     PN5180DEBUG(" ");
     PN5180DEBUG(formatHex(readMultipleCmd[i]));
   }
@@ -555,7 +555,7 @@ ISO15693ErrorCode PN5180ISO15693::getSystemInfo(uint8_t *uid, uint8_t *blockSize
 
 #ifdef DEBUG
   PN5180DEBUG("Get System Information");
-  for (int i=0; i<sizeof(sysInfo); i++) {
+  for (size_t i=0; i<sizeof(sysInfo); i++) {
     PN5180DEBUG(" ");
     PN5180DEBUG(formatHex(sysInfo[i]));
   }
@@ -588,6 +588,16 @@ ISO15693ErrorCode PN5180ISO15693::getSystemInfo(uint8_t *uid, uint8_t *blockSize
   uint8_t *p = &readBuffer[10];
 
   uint8_t infoFlags = readBuffer[1];
+  // The info flags say which optional fields follow the UID; make sure they all arrived
+  uint16_t needed = 10 + (infoFlags & 0x01 ? 1 : 0)   // DSFID
+                       + (infoFlags & 0x02 ? 1 : 0)   // AFI
+                       + (infoFlags & 0x04 ? 2 : 0)   // memory size
+                       + (infoFlags & 0x08 ? 1 : 0);  // IC reference
+  if (len < needed) {
+    PN5180DEBUG_PRINTLN(F("getSystemInfo: answer shorter than its info flags announce"));
+    return ISO15693_EC_UNKNOWN_ERROR;
+  }
+
   if (infoFlags & 0x01) { // DSFID flag
     uint8_t __attribute__((unused)) dsfid = *p++;
     PN5180DEBUG("DSFID=");  // Data storage format identifier

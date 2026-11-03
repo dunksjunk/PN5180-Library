@@ -42,8 +42,10 @@ they are listed here as they land.
 - Fix (examples): the optional `WRITE_ENABLED` branch in `PN5180-Library` and `PN5180-MultipleBlock` did not compile (`malloc` without a cast) and leaked its buffer on every loop. It now uses a stack buffer.
 - Fix: `mifareBlockWrite16()` returned whatever byte was in the receive buffer (typically `0xFF`) when the card didn't answer. It now waits for the answer and returns `0` if none came. It no longer sends the 16 data bytes after the card NAKs the block number. **Behavior change:** the ACK/NAK value is the 4-bit frame only (`0x0A` = ACK)
 - Fix: `mifareHalt()` always returned `true`; it now returns `false` if the HLTA command could not be sent
+- Fix: `getSystemInfo()` read the optional fields (DSFID, AFI, memory size, IC reference) without checking that the tag's answer contained them
 - Fix: `sendData()` ignored failures while switching the PN5180 to Transceive, and `sendData()`/`writeEEprom()` copied the data into a variable-length array on the stack. The data now goes to the SPI bus directly. `sendData()` rejects a negative `len`
 - Fix: debug tracing of reads longer than 255 bytes looped forever (8-bit loop counter)
+- Fix: sign-compare warning in `PN5180ISO15693.cpp`
 - Fix: `mifareBlockWrite16()` ignored SPI failures. It now stops at the first failure, always re-enables RX CRC, and returns `0` on failure
 - Fix: the library did not compile on AVR (and other non-ESP32 boards) since 2.3.2, because `begin()` called the ESP32-only `SPI.begin(sck, miso, mosi, ss)`. Custom SPI pins are now ESP32-only and ignored elsewhere
 - Fix: the `PN5180-LPCD-ESP32-deep-sleep` example used an undefined `WAKEUP_PIN_MASK` and did not compile
