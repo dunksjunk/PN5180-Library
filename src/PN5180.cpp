@@ -411,7 +411,7 @@ uint8_t * PN5180::readData(int len) {
   PN5180DEBUG_ENTER;
   
   if (len < 0 || len > 508) {
-    Serial.println(F("*** FATAL: Reading more than 508 bytes is not supported!"));
+    PN5180DEBUG_PRINTLN(F("*** ERROR: readData len must be 0..508!"));
     PN5180DEBUG_EXIT;
     return 0L;
   }
