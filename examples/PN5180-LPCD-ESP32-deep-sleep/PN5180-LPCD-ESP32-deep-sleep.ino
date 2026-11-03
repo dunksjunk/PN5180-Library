@@ -123,7 +123,7 @@ void loop() {
   if (digitalRead(PN5180_IRQ) == HIGH) {
     showIRQStatus(nfc.getIRQStatus());
     uint32_t registerValue;
-    nfc.readRegister(0x26, &registerValue);  Serial.print(registerValue); 
+    if (nfc.readRegister(AGC_REF_CONFIG, &registerValue)) Serial.println(registerValue, HEX);
     delay(2000);
     nfc.reset(); //very important to have for lpcd to work
 	

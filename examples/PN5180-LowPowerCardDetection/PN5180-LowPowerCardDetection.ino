@@ -214,9 +214,10 @@ void loop() {
     // LPCD detection irq
     showIRQStatus(nfc.getIRQStatus());
     uint32_t u;
-    nfc.readRegister(0x26, &u);
-    Serial.print("LPCD_REFERENCE_VALUE: ");
-    Serial.println(u, HEX);
+    if (nfc.readRegister(AGC_REF_CONFIG, &u)) {
+      Serial.print(F("AGC_REF_CONFIG: "));
+      Serial.println(u, HEX);
+    }
     nfc.clearIRQStatus(0xffffffff);
     nfc.reset(); 
     // try to read the UID for an ISO-14443 card

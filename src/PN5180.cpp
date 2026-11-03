@@ -130,23 +130,19 @@ bool PN5180::writeRegister(uint8_t reg, uint32_t value) {
   PN5180DEBUG_PRINTF(F("PN5180::writeRegister(reg=%d, value=%d)"), reg, value);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint8_t *p = (uint8_t*)&value;
+  // 4-byte parameters go LSB first (datasheet 11.4.3.1); built with shifts so the host's
+  // byte order doesn't matter
+  uint8_t cmd[] = { PN5180_WRITE_REGISTER, reg, uint8_t(value), uint8_t(value >> 8), uint8_t(value >> 16), uint8_t(value >> 24) };
 
 #ifdef DEBUG
   PN5180DEBUG(F("Write Register 0x"));
   PN5180DEBUG(formatHex(reg));
   PN5180DEBUG(F(", value (LSB first)=0x"));
   for (int i=0; i<4; i++) {
-    PN5180DEBUG(formatHex(p[i]));
+    PN5180DEBUG(formatHex(cmd[2 + i]));
   }
   PN5180DEBUG_PRINTLN();
 #endif
-
-  /*
-  For all 4 byte command parameter transfers (e.g. register values), the payload
-  parameters passed follow the little endian approach (Least Significant Byte first).
-   */
-  uint8_t cmd[] = { PN5180_WRITE_REGISTER, reg, p[0], p[1], p[2], p[3] };
 
   if (!transceiveCommand(cmd, sizeof(cmd))) {
     PN5180DEBUG_EXIT;
@@ -169,19 +165,19 @@ bool PN5180::writeRegisterWithOrMask(uint8_t reg, uint32_t mask) {
   PN5180DEBUG_PRINTF(F("PN5180::writeRegisterWithOrMask(reg=%d, mask=%d)"), reg, mask);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint8_t *p = (uint8_t*)&mask;
+  // 4-byte parameters go LSB first (datasheet 11.4.3.1); built with shifts so the host's
+  // byte order doesn't matter
+  uint8_t cmd[] = { PN5180_WRITE_REGISTER_OR_MASK, reg, uint8_t(mask), uint8_t(mask >> 8), uint8_t(mask >> 16), uint8_t(mask >> 24) };
 
 #ifdef DEBUG
   PN5180DEBUG(F("Write Register 0x"));
   PN5180DEBUG(formatHex(reg));
   PN5180DEBUG(F(" with OR mask (LSB first)=0x"));
   for (int i=0; i<4; i++) {
-    PN5180DEBUG(formatHex(p[i]));
+    PN5180DEBUG(formatHex(cmd[2 + i]));
   }
   PN5180DEBUG_PRINTLN();
 #endif
-
-  uint8_t cmd[] = { PN5180_WRITE_REGISTER_OR_MASK, reg, p[0], p[1], p[2], p[3] };
 
   if (!transceiveCommand(cmd, sizeof(cmd))) {
     PN5180DEBUG_EXIT;
@@ -204,19 +200,19 @@ bool PN5180::writeRegisterWithAndMask(uint8_t reg, uint32_t mask) {
   PN5180DEBUG_PRINTF(F("PN5180::writeRegisterWithAndMask(reg=%d, mask=%d)"), reg, mask);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint8_t *p = (uint8_t*)&mask;
+  // 4-byte parameters go LSB first (datasheet 11.4.3.1); built with shifts so the host's
+  // byte order doesn't matter
+  uint8_t cmd[] = { PN5180_WRITE_REGISTER_AND_MASK, reg, uint8_t(mask), uint8_t(mask >> 8), uint8_t(mask >> 16), uint8_t(mask >> 24) };
 
 #ifdef DEBUG
   PN5180DEBUG(F("Write Register 0x"));
   PN5180DEBUG(formatHex(reg));
   PN5180DEBUG(F(" with AND mask (LSB first)=0x"));
   for (int i=0; i<4; i++) {
-    PN5180DEBUG(formatHex(p[i]));
+    PN5180DEBUG(formatHex(cmd[2 + i]));
   }
   PN5180DEBUG_PRINTLN();
 #endif
-
-  uint8_t cmd[] = { PN5180_WRITE_REGISTER_AND_MASK, reg, p[0], p[1], p[2], p[3] };
 
   if (!transceiveCommand(cmd, sizeof(cmd))) {
     PN5180DEBUG_EXIT;
@@ -244,11 +240,13 @@ bool PN5180::readRegister(uint8_t reg, uint32_t *value) {
   }
 
   uint8_t cmd[] = { PN5180_READ_REGISTER, reg };
+  uint8_t raw[4];  // LSB first
 
-  if (!transceiveCommand(cmd, sizeof(cmd), (uint8_t*)value, 4)) {
+  if (!transceiveCommand(cmd, sizeof(cmd), raw, sizeof(raw))) {
     PN5180DEBUG_EXIT;
     return false;
   }
+  *value = (uint32_t)raw[0] | ((uint32_t)raw[1] << 8) | ((uint32_t)raw[2] << 16) | ((uint32_t)raw[3] << 24);
 
   PN5180DEBUG(F("Register value=0x"));
   PN5180DEBUG(formatHex(*value));
@@ -386,6 +384,7 @@ bool PN5180::sendData(const uint8_t *data, int len, uint8_t validBits) {
   PN5180TransceiveStat transceiveState = getTransceiveState();
   if (PN5180_TS_WaitTransmit != transceiveState) {
     PN5180DEBUG_PRINTLN(F("*** ERROR: Transceiver not in state WaitTransmit!?"));
+    writeRegisterWithAndMask(SYSTEM_CONFIG, 0xfffffff8);  // back to Idle; we fail either way
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -665,10 +664,10 @@ bool PN5180::setRF_on() {
 	  }
   };
   PN5180DEBUG_ON;
-  
-  clearIRQStatus(TX_RFON_IRQ_STAT);
+
+  bool cleared = clearIRQStatus(TX_RFON_IRQ_STAT);
   PN5180DEBUG_EXIT;
-  return true;
+  return cleared;
 }
 
 /*
@@ -717,11 +716,11 @@ bool PN5180::setRF_off() {
 		  return false;
 	  }
   };
-  PN5180DEBUG_ON;  
-  
-  clearIRQStatus(TX_RFOFF_IRQ_STAT);
+  PN5180DEBUG_ON;
+
+  bool cleared = clearIRQStatus(TX_RFOFF_IRQ_STAT);
   PN5180DEBUG_EXIT;
-  return true;
+  return cleared;
 }
 
 /*
