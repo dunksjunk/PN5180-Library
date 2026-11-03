@@ -15,7 +15,7 @@ Status values:
 
 | Board | MCU / module | Flash / PSRAM | USB bridge | FQBN | Core | Library | Status |
 |---|---|---|---|---|---|---|---|
-| [ELEGOO ESP-32 Dev Board (ESP-WROOM-32)](#elegoo-esp-32-dev-board-esp-wroom-32) | ESP32-D0WD-V3 rev 3.1 / ESP-WROOM-32 | 4 MB / none | CP2102 | `esp32:esp32:esp32` | esp32 3.3.12 | 3.0.0-dev (9c04e37) | Partial |
+| [ELEGOO ESP-32 Dev Board (ESP-WROOM-32)](#elegoo-esp-32-dev-board-esp-wroom-32) | ESP32-D0WD-V3 rev 3.1 / ESP-WROOM-32 | 4 MB / none | CP2102 | `esp32:esp32:esp32` | esp32 3.3.12 | 3.0.0-dev (d0cdb01) | Partial |
 
 ## Board details
 
@@ -36,7 +36,7 @@ Status values:
   `PN5180-ISO14443`, `PN5180-ReadUID` (NTAG215, free heap steady at 331 KB), `PN5180-Library`,
   `PN5180-MultipleBlock`, `PN5180-ReadMultipleUID` (ISO 15693 tag), and `PN5180-LowPowerCardDetection`
   (arms and stays quiet with nothing changing). Not run: `PN5180-LPCD-ESP32-deep-sleep`, which uses
-  different pins, and the examples' `WRITE_ENABLED` branches
+  different pins, and the examples' `WRITE_ENABLED` branches (these compile since d0cdb01, but haven't been run)
 - **Tags tested:**
   - NTAG215 (ISO 14443A, 7-byte UID `04 BB 6A 04 CC 2A 81`, SAK 00, ATQA 00 44): activation, UID,
     `mifareBlockRead()` of pages 0–134 (200/200 reads OK), GET_VERSION, `mifareHalt()` + WUPA,
@@ -44,7 +44,23 @@ Status values:
   - ISO 15693 tag, UID `E0 1D A1 E8 3F 9F 9E D9`, 32 blocks of 4 bytes: `getInventory()` (20/20, 33 ms each),
     `getInventoryMultiple()` (single tag), `getSystemInfo()`, `readSingleBlock()`, `readMultipleBlock()`
     including a non-zero start, `writeSingleBlock()` on block 20 (written and restored), wrong UID fails cleanly.
-    Not tested: multiple tags at once (anti-collision), ICODE SLIX2 privacy/password commands
+    Not tested: ICODE SLIX2 privacy/password commands
+  - Two more ISO 15693 cards (2026-11-02), UIDs `E0 1D A1 2A 46 95 16 C7` and `E0 1D A1 15 04 7F 39 11`:
+    `getInventory()` and `getInventoryMultiple()` on each card alone, 10/10
+  - A MIFARE-type ISO 14443A card with a 4-byte UID (`56 57 2F 07`): UID read only
+  - **Several ISO 15693 tags at once** (2026-11-02, d0cdb01): `getInventoryMultiple()` found both tags of a
+    pair 10/10, with no duplicates, for two different pairs. Both UIDs then answered addressed reads, and
+    `maxTags` = 1 returned exactly one tag. The three cards answer in slots 9, 7 and 1, so no two of them
+    collide: this covers the 16-slot round, **not** collision resolution. Test with an anti-collision fix
+    that is not yet committed: the same pair 10/10; a masked inventory with masks of 0–8 UID nibbles
+    answered in the expected slot, and non-matching masks got no answer (3 runs). That test found and
+    fixed a missed answer in slot 0 after a long masked request. Not tested yet: two tags answering in
+    the same slot, more than 2 tags at once
+  - **Antenna limits with full-size cards:** two ISO 15693 cards stacked flat on this module's antenna
+    blocked each other completely (no answers at all). With card stock between them the top card was out
+    of range; with one sheet of printer paper both read reliably. With three cards, or with one particular
+    pair, at least one card stopped answering whatever the spacing or fanning. The PN5180 `AGC_VALUE`
+    register stayed at 496 throughout, so it doesn't show this loading in reader mode
   - LPCD (`prepareLPCD()` + `switchToLPCD(300)`, threshold 0x03): fired when a hand reached for the card
     and when the ISO 15693 tag was placed on the empty reader. 0 false triggers over about 2 minutes at
     thresholds 0x03–0x20 with nothing changing. In one early run it fired every 0.3–3 s with no visible
@@ -66,7 +82,12 @@ Status values:
 - **Notes:** board self-test without the PN5180 (2026-11-01) passed: flash, heap, timing, both
   cores, and pull-up/pull-down on GPIO 18, 19, 23, 16, 17. GPIO5 (default BUSY) reads high even
   with the internal pull-down, because the board has an external pull-up on this boot strapping pin.
-  That's fine for BUSY, which the PN5180 drives actively.
+  That's fine for BUSY, which the PN5180 drives actively. With the PN5180 attached, the same self-test
+  reports GPIO5 as failing: the idle PN5180 drives BUSY low, which is expected.
+- **Wiring fault (2026-11-02):** a MOSI jumper that was working loose made a tag answer one or two slots
+  early and made `getInventoryMultiple()` miss it in 3 of 10 runs. The wire then came off completely; every call then failed after its timeout without
+  hanging. After reseating it, the same card answered in its correct slot every time. Check the jumpers
+  before suspecting the library when ISO 15693 results are erratic.
 
 ## Adding a board
 
