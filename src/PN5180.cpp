@@ -238,6 +238,10 @@ bool PN5180::readRegister(uint8_t reg, uint32_t *value) {
   PN5180DEBUG_PRINTF(F("PN5180::readRegister(reg=0x%s, *value)"), formatHex(reg));
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
+  if (0 == value) {
+    PN5180DEBUG_EXIT;
+    return false;
+  }
 
   uint8_t cmd[] = { PN5180_READ_REGISTER, reg };
 
@@ -261,6 +265,12 @@ bool PN5180::writeEEprom(uint8_t addr, const uint8_t *buffer, uint8_t len) {
   PN5180DEBUG_PRINTF(F("PN5180::writeEEprom(addr=%s, *buffer, len=%d)"), formatHex(addr), len);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
+  // Datasheet: address 0..254, 1..255 bytes
+  if (0 == buffer || addr > 254 || 0 == len) {
+    PN5180DEBUG_PRINTLN(F("ERROR: writeEEprom needs a buffer, addr 0..254 and len 1..255"));
+    PN5180DEBUG_EXIT;
+    return false;
+  }
   uint8_t cmd[2] = { PN5180_WRITE_EEPROM, addr };
   if (!transceiveCommand(cmd, sizeof(cmd), buffer, len, 0, 0)) {
     PN5180DEBUG_EXIT;
@@ -285,8 +295,9 @@ bool PN5180::readEEprom(uint8_t addr, uint8_t *buffer, int len) {
   PN5180DEBUG_PRINTF(F("PN5180::readEEprom(addr=%s, *buffer, len=%d)"), formatHex(addr), len);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  if ((addr > 254) || ((addr+len) > 254)) {
-    PN5180DEBUG_PRINTLN(F("ERROR: Reading beyond addr 254!"));
+  // Datasheet: start address 0..254, and the read must not go beyond address 254
+  if (0 == buffer || len < 1 || (int)addr + len - 1 > 254) {
+    PN5180DEBUG_PRINTLN(F("ERROR: readEEprom needs a buffer, len >= 1 and must end at addr 254 or below!"));
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -337,8 +348,8 @@ bool PN5180::sendData(const uint8_t *data, int len, uint8_t validBits) {
   PN5180DEBUG_PRINTF(F("PN5180::sendData(*data, len=%d, validBits=%d)"), len, validBits);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  if (len < 0 || len > 260) {
-    PN5180DEBUG_PRINTLN(F("ERROR: sendData length must be 0..260 bytes!"));
+  if (len < 0 || len > 260 || validBits > 7 || (len > 0 && 0 == data)) {
+    PN5180DEBUG_PRINTLN(F("ERROR: sendData needs len 0..260, validBits 0..7 and data for len > 0!"));
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -450,7 +461,7 @@ bool PN5180::readData(int len, uint8_t *buffer) {
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
   
-  if (len < 0 || len > 508) {
+  if (len < 0 || len > 508 || 0 == buffer) {
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -510,10 +521,13 @@ bool PN5180::prepareLPCD() {
 }
 
 /* switch the mode to LPCD (low power card detection)
- * Parameter 'wakeupCounterInMs' must be in the range from 0x0 - 0xA82
- * max. wake-up time is 2960 ms.
+ * Parameter 'wakeupCounterInMs' must be in the range from 1 to 2690 (0xA82), inclusive
+ * (datasheet, SWITCH_MODE). Out-of-range values return false without changing anything.
  */
 bool PN5180::switchToLPCD(uint16_t wakeupCounterInMs) {
+  if (wakeupCounterInMs < 1 || wakeupCounterInMs > 2690) {
+    return false;
+  }
   // clear all IRQ flags
   if (!clearIRQStatus(0xffffffff)) {
     return false;
@@ -536,6 +550,10 @@ bool PN5180::switchToLPCD(uint16_t wakeupCounterInMs) {
 int16_t PN5180::mifareAuthenticate(uint8_t blockNo, const uint8_t *key, uint8_t keyType, const uint8_t *uid) {
   if (keyType != 0x60 && keyType != 0x61){
     PN5180DEBUG_PRINTLN(F("*** ERROR: invalid key type supplied!"));
+    return -2;
+  }
+  if (0 == key || 0 == uid) {
+    PN5180DEBUG_PRINTLN(F("*** ERROR: key and uid are required!"));
     return -2;
   }
 
@@ -712,6 +730,7 @@ bool PN5180::setRF_off() {
  * for commands without a response. sendBuffer is not modified.
  */
 bool PN5180::sendCommand(const uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
+  if (0 == sendBuffer || 0 == sendBufferLen || (0 != recvBufferLen && 0 == recvBuffer)) return false;
   return transceiveCommand(sendBuffer, sendBufferLen, recvBuffer, recvBufferLen);
 }
 

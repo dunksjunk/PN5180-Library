@@ -47,7 +47,7 @@ void print_GPIO_wake_up(){
 
 PN5180 nfc(PN5180_NSS, PN5180_BUSY, PN5180_RST);
 
-uint16_t wakeupCounterInMs = 0x3FF; //  must be in the range of 0x0 - 0xA82. max wake-up time is 2960 ms.
+uint16_t wakeupCounterInMs = 0x3FF; //  must be in the range 1 - 2690 (0xA82) ms.
 
 void setup() {
   Serial.begin(115200);
