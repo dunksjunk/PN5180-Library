@@ -261,11 +261,8 @@ bool PN5180::writeEEprom(uint8_t addr, const uint8_t *buffer, uint8_t len) {
   PN5180DEBUG_PRINTF(F("PN5180::writeEEprom(addr=%s, *buffer, len=%d)"), formatHex(addr), len);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  uint8_t cmd[len + 2];
-  cmd[0] = PN5180_WRITE_EEPROM;
-  cmd[1] = addr;
-  for (int i = 0; i < len; i++) cmd[2 + i] = buffer[i];
-  if (!transceiveCommand(cmd, len + 2)) {
+  uint8_t cmd[2] = { PN5180_WRITE_EEPROM, addr };
+  if (!transceiveCommand(cmd, sizeof(cmd), buffer, len, 0, 0)) {
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -340,8 +337,8 @@ bool PN5180::sendData(const uint8_t *data, int len, uint8_t validBits) {
   PN5180DEBUG_PRINTF(F("PN5180::sendData(*data, len=%d, validBits=%d)"), len, validBits);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
-  if (len > 260) {
-    PN5180DEBUG_PRINTLN(F("ERROR: sendData with more than 260 bytes is not supported!"));
+  if (len < 0 || len > 260) {
+    PN5180DEBUG_PRINTLN(F("ERROR: sendData length must be 0..260 bytes!"));
     PN5180DEBUG_EXIT;
     return false;
   }
@@ -357,15 +354,15 @@ bool PN5180::sendData(const uint8_t *data, int len, uint8_t validBits) {
   PN5180DEBUG_PRINTLN();
 #endif
 
-  uint8_t buffer[len+2];
-  buffer[0] = PN5180_SEND_DATA;
-  buffer[1] = validBits; // number of valid bits of last byte are transmitted (0 = all bits are transmitted)
-  for (int i=0; i<len; i++) {
-    buffer[2+i] = data[i];
-  }
+  // number of valid bits of last byte are transmitted (0 = all bits are transmitted)
+  uint8_t header[2] = { PN5180_SEND_DATA, validBits };
 
-  writeRegisterWithAndMask(SYSTEM_CONFIG, 0xfffffff8);  // Idle/StopCom Command
-  writeRegisterWithOrMask(SYSTEM_CONFIG, 0x00000003);   // Transceive Command
+  if (!writeRegisterWithAndMask(SYSTEM_CONFIG, 0xfffffff8) ||  // Idle/StopCom Command
+      !writeRegisterWithOrMask(SYSTEM_CONFIG, 0x00000003)) {   // Transceive Command
+    PN5180DEBUG_PRINTLN(F("*** ERROR: setting Transceive command failed"));
+    PN5180DEBUG_EXIT;
+    return false;
+  }
   /*
    * Transceive command; initiates a transceive cycle.
    * Note: Depending on the value of the Initiator bit, a
@@ -382,7 +379,7 @@ bool PN5180::sendData(const uint8_t *data, int len, uint8_t validBits) {
     return false;
   }
 
-  bool ret = transceiveCommand(buffer, len+2);
+  bool ret = transceiveCommand(header, sizeof(header), data, len, 0, 0);
   PN5180DEBUG_EXIT;
   return ret;
 }
@@ -757,15 +754,21 @@ status register contain information on the exception.
  * If there is a parameter error, the IRQ is set to ACTIVE and a GENERAL_ERROR_IRQ is set.
  */
 bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer, size_t recvBufferLen) {
-  PN5180DEBUG_PRINTF(F("PN5180::transceiveCommand(*sendBuffer, sendBufferLen=%d, *recvBuffer, recvBufferLen=%d)"), sendBufferLen, recvBufferLen);
+  return transceiveCommand(sendBuffer, sendBufferLen, 0, 0, recvBuffer, recvBufferLen);
+}
+
+bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, const uint8_t *payload, size_t payloadLen,
+                               uint8_t *recvBuffer, size_t recvBufferLen) {
+  PN5180DEBUG_PRINTF(F("PN5180::transceiveCommand(*sendBuffer, sendBufferLen=%d, payloadLen=%d, *recvBuffer, recvBufferLen=%d)"),
+                     sendBufferLen, payloadLen, recvBufferLen);
   PN5180DEBUG_PRINTLN();
   PN5180DEBUG_ENTER;
   PN5180_SPI.beginTransaction(SPI_SETTINGS);
 #ifdef DEBUG
   PN5180DEBUG(F("Sending SPI frame: '"));
-  for (uint8_t i=0; i<sendBufferLen; i++) {
+  for (size_t i=0; i<sendBufferLen + payloadLen; i++) {
     if (i>0) { PN5180DEBUG(" "); }
-    PN5180DEBUG(formatHex(sendBuffer[i]));
+    PN5180DEBUG(formatHex(i < sendBufferLen ? sendBuffer[i] : payload[i - sendBufferLen]));
   }
   PN5180DEBUG_PRINTLN("'");
 #endif
@@ -785,7 +788,10 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
   // 1.
   digitalWrite(PN5180_NSS, LOW); delay(1);
   // 2.
-  PN5180_SPI.transfer((uint8_t*)sendBuffer, sendBufferLen);  
+  PN5180_SPI.transfer((uint8_t*)sendBuffer, sendBufferLen);  // in place: overwrites sendBuffer
+  for (size_t i = 0; i < payloadLen; i++) {                  // byte-wise, so payload stays unmodified
+    PN5180_SPI.transfer(payload[i]);
+  }
   // 3.
   startedWaiting = millis();
   while (HIGH != digitalRead(PN5180_BUSY)) {
@@ -856,7 +862,7 @@ bool PN5180::transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_
 
 #ifdef DEBUG
   PN5180DEBUG(F("Received: '"));
-  for (uint8_t i=0; i<recvBufferLen; i++) {
+  for (size_t i=0; i<recvBufferLen; i++) {  // size_t: reads can be longer than 255 bytes
     if (i > 0) PN5180DEBUG(" ");
     PN5180DEBUG(formatHex(recvBuffer[i]));
   }

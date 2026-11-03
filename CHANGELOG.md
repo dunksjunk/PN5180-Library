@@ -40,6 +40,8 @@ they are listed here as they land.
 - `switchToLPCD()` now returns `false` if clearing the IRQ flags or enabling the LPCD IRQ fails (it used to ignore both and report only the mode switch)
 - Examples: `PN5180-LowPowerCardDetection` wrote the five LPCD EEPROM bytes on every boot (EEPROM wear) and used 511 bytes of stack for it, which is a lot on an Uno. It now calls `prepareLPCD()`. **Behavior change:** the example's LPCD threshold is now the library default `0x03` instead of `0x04`
 - Fix (examples): the optional `WRITE_ENABLED` branch in `PN5180-Library` and `PN5180-MultipleBlock` did not compile (`malloc` without a cast) and leaked its buffer on every loop. It now uses a stack buffer.
+- Fix: `sendData()` ignored failures while switching the PN5180 to Transceive, and `sendData()`/`writeEEprom()` copied the data into a variable-length array on the stack. The data now goes to the SPI bus directly. `sendData()` rejects a negative `len`
+- Fix: debug tracing of reads longer than 255 bytes looped forever (8-bit loop counter)
 - Fix: `mifareBlockWrite16()` ignored SPI failures. It now stops at the first failure, always re-enables RX CRC, and returns `0` on failure
 - Fix: the library did not compile on AVR (and other non-ESP32 boards) since 2.3.2, because `begin()` called the ESP32-only `SPI.begin(sck, miso, mosi, ss)`. Custom SPI pins are now ESP32-only and ignored elsewhere
 - Fix: the `PN5180-LPCD-ESP32-deep-sleep` example used an undefined `WAKEUP_PIN_MASK` and did not compile

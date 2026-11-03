@@ -165,6 +165,10 @@ public:
    */
 private:
   bool transceiveCommand(uint8_t *sendBuffer, size_t sendBufferLen, uint8_t *recvBuffer = 0, size_t recvBufferLen = 0);
+  // Same, for a command made of a short header plus a caller's payload: both go out in one
+  // SPI frame without copying the payload (which is not modified).
+  bool transceiveCommand(uint8_t *header, size_t headerLen, const uint8_t *payload, size_t payloadLen,
+                         uint8_t *recvBuffer, size_t recvBufferLen);
 
 };
 
